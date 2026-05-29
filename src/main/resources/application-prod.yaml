@@ -1,0 +1,7 @@
+spring:
+  datasource:
+    url: ${DB_URL}
+    password: ${DB_PASSWORD}
+  data:
+    redis:
+      host: ${REDIS_HOST}
