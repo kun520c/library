@@ -67,12 +67,24 @@ public class BookServiceImpl implements BookService {
         return toVO(book);
     }
 
+    public BookVO getByIsbn(String isbn){
+        Book book = bookMapper.selectByIsbn(isbn);
+        if(book == null){
+            throw new BusinessException(404,"图书不存在");
+        }
+        return toVO(book);
+    }
+
     @Override
     @Transactional
     public void add(BookDTO dto) {
-        Book book = toEntity(dto);
-        bookMapper.insert(book);
-        clearListCache();
+        if(getByIsbn(dto.getIsbn()) == null){
+            Book book = toEntity(dto);
+            bookMapper.insert(book);
+            clearListCache();
+        }else{
+            throw new BusinessException(409,"该书已存入");
+        }
     }
 
     @Override

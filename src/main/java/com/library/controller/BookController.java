@@ -26,7 +26,7 @@ public class BookController {
 
     @Operation(summary = "查询所有图书")
     @GetMapping
-    public Result list(BookPageDTO dto) {
+    public Result list(@Validated BookPageDTO dto) {
         if(dto.hasCondition()){
             Map<String, Object> result = new HashMap<>();
             result.put("list",bookService.search(dto));

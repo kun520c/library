@@ -32,6 +32,8 @@ public interface BookMapper {
     @Update("UPDATE Book SET is_deleted = 1 WHERE id = #{id}")
     int deleteById(@Param("id") Integer id);
 
+    @Select("SELECT title,author,isbn,price,stock,category_id FROM Book WHERE is_deleted = 0 AND isbn = #{isbn}")
+    Book selectByIsbn(@Param("isbn") String isbn);
     /** 动态条件查询图书（分页） */
     List<Book> selectByCondition(@Param("title") String title,
                                  @Param("author") String author,

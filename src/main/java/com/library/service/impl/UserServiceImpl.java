@@ -1,5 +1,6 @@
 package com.library.service.impl;
 
+import com.library.exception.BusinessException;
 import com.library.mapper.UserMapper;
 import com.library.model.entity.User;
 import com.library.model.dto.RegisterDTO;
@@ -25,11 +26,15 @@ public class UserServiceImpl implements UserService {
     @Transactional
     @Override
     public void register(RegisterDTO dto){
-        User user = new User();
-        user.setUsername(dto.getUsername());
-        user.setAccount(dto.getAccount());
-        user.setPassword(PasswordUtils.encode(dto.getPassword()));
-        userMapper.register(user);
-        log.info("用户注册成功, username={}, account={}", dto.getUsername(), dto.getAccount());
+        if(getUserByAccount(dto.getAccount()) == null) {
+            User user = new User();
+            user.setUsername(dto.getUsername());
+            user.setAccount(dto.getAccount());
+            user.setPassword(PasswordUtils.encode(dto.getPassword()));
+            userMapper.register(user);
+            log.info("用户注册成功, username={}, account={}", dto.getUsername(), dto.getAccount());
+        }else{
+            throw new BusinessException(409,"账号已被注册");
+        }
     }
 }

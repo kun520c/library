@@ -1,5 +1,7 @@
 package com.library.interceptor;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.library.common.Result;
 import com.library.utils.JwtUtils;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -11,6 +13,8 @@ import org.springframework.web.servlet.HandlerInterceptor;
 @RequiredArgsConstructor
 public class LoginInterceptor implements HandlerInterceptor {
     private final JwtUtils jwtUtils;
+
+    private final ObjectMapper objectMapper;
     @Override
     public boolean preHandle(HttpServletRequest request,
                              HttpServletResponse response,
@@ -19,6 +23,10 @@ public class LoginInterceptor implements HandlerInterceptor {
 
         if(token == null || token.isEmpty()){
             response.setStatus(401);
+            response.setContentType("application/json;charset=UTF-8");
+            Result result = Result.error(401,"请先登录");
+            String json = objectMapper.writeValueAsString(result);
+            response.getWriter().write(json);
             return false;
         }
 
@@ -26,6 +34,10 @@ public class LoginInterceptor implements HandlerInterceptor {
             jwtUtils.parseToken(token);
         }catch (Exception e){
             response.setStatus(401);
+            response.setContentType("application/json;charset=UTF-8");
+            Result result = Result.error(401,"错误的令牌");
+            String json = objectMapper.writeValueAsString(result);
+            response.getWriter().write(json);
             return false;
         }
         return true;
