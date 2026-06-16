@@ -23,8 +23,4 @@ public class BookPageDTO {
     @Min(1)
     private Integer size = 10;
 
-    public boolean hasCondition() {
-        return this.getTitle() != null || this.getAuthor() != null
-                || this.getIsbn() != null || this.getCategoryId() != null;
-    }
 }

@@ -1,6 +1,9 @@
 package com.library.common;
 
+import com.library.model.vo.BookVO;
+import com.library.model.vo.PageVO;
 import lombok.Data;
+import java.util.List;
 
 @Data
 public class Result {
@@ -34,6 +37,15 @@ public class Result {
         Result r = new Result();
         r.code = 500;
         r.message = message;
+        return r;
+    }
+
+    public static Result page(List<BookVO> list,long total){
+        Result r = new Result();
+        PageVO pageVO = new PageVO(list,total);
+        r.code = 200;
+        r.message = "success";
+        r.data = pageVO;
         return r;
     }
 }

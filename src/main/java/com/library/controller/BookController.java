@@ -3,6 +3,7 @@ package com.library.controller;
 import com.library.common.Result;
 import com.library.model.dto.BookDTO;
 import com.library.model.dto.BookPageDTO;
+import com.library.model.vo.BookVO;
 import com.library.service.BookService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -11,6 +12,7 @@ import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -24,17 +26,12 @@ public class BookController {
 
     private final BookService bookService;
 
-    @Operation(summary = "查询所有图书")
+    @Operation(summary = "分页查询图书")
     @GetMapping
     public Result list(@Validated BookPageDTO dto) {
-        if(dto.hasCondition()){
-            Map<String, Object> result = new HashMap<>();
-            result.put("list",bookService.search(dto));
-            result.put("total",bookService.count(dto));
-            return Result.success(result);
-        }else {
-            return Result.success(bookService.list());
-        }
+        List<BookVO> search = bookService.search(dto);
+        long count = bookService.count(dto);
+        return Result.page(search, count);
     }
 
     @Operation(summary = "根据ID查询图书")
