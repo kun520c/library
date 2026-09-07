@@ -100,7 +100,8 @@ public class BookController {
             @ApiResponse(responseCode = "400", description = "ID非法"),
             @ApiResponse(responseCode = "401", description = "未认证"),
             @ApiResponse(responseCode = "403", description = "无 ADMIN 权限"),
-            @ApiResponse(responseCode = "404", description = "图书不存在")
+            @ApiResponse(responseCode = "404", description = "图书不存在"),
+            @ApiResponse(responseCode = "409", description = "图书仍有未归还借阅记录")
     })
     @DeleteMapping("/{id}")
     @RequireRole(Role.ADMIN)

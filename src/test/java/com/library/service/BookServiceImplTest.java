@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.library.config.properties.CacheProperties;
 import com.library.exception.BusinessException;
 import com.library.mapper.BookMapper;
+import com.library.mapper.BorrowRecordMapper;
 import com.library.mapper.CategoryMapper;
 import com.library.model.dto.BookDTO;
 import com.library.model.dto.BookPageDTO;
@@ -43,6 +44,8 @@ class BookServiceImplTest {
     @Mock
     private BookMapper bookMapper;
     @Mock
+    private BorrowRecordMapper borrowRecordMapper;
+    @Mock
     private CategoryMapper categoryMapper;
     @Mock
     private BookCacheInvalidator cacheInvalidator;
@@ -58,7 +61,7 @@ class BookServiceImplTest {
         objectMapper = new ObjectMapper();
         lenient().when(redisTemplate.opsForValue()).thenReturn(valueOperations);
         lenient().when(categoryMapper.selectByIdForUpdate(2)).thenReturn(new Category());
-        service = new BookServiceImpl(bookMapper, categoryMapper, redisTemplate, objectMapper,
+        service = new BookServiceImpl(bookMapper, borrowRecordMapper, categoryMapper, redisTemplate, objectMapper,
                 new CacheProperties("test:book:", "__NULL__", Duration.ofMinutes(10), Duration.ofMinutes(1)),
                 cacheInvalidator);
     }
@@ -171,9 +174,20 @@ class BookServiceImplTest {
 
     @Test
     void deletingMissingOrAlreadyDeletedBookReturnsNotFound() {
-        when(bookMapper.deleteById(1)).thenReturn(0);
+        when(bookMapper.selectByIdForUpdate(1)).thenReturn(null);
 
         assertNotFound(() -> service.delete(1));
+        verify(bookMapper, never()).deleteById(1);
+    }
+
+    @Test
+    void deletingBookWithActiveBorrowReturnsConflict() {
+        when(bookMapper.selectByIdForUpdate(1)).thenReturn(book());
+        when(borrowRecordMapper.existsBorrowedByBookId(1)).thenReturn(true);
+
+        assertConflict(() -> service.delete(1));
+
+        verify(bookMapper, never()).deleteById(1);
     }
 
     @Test
@@ -188,6 +202,8 @@ class BookServiceImplTest {
 
     @Test
     void deleteInvalidatesIdCache() {
+        when(bookMapper.selectByIdForUpdate(1)).thenReturn(book());
+        when(borrowRecordMapper.existsBorrowedByBookId(1)).thenReturn(false);
         when(bookMapper.deleteById(1)).thenReturn(1);
 
         service.delete(1);

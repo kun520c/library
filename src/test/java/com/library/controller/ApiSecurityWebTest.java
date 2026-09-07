@@ -6,6 +6,7 @@ import com.library.exception.BusinessException;
 import com.library.exception.GlobalExceptionHandler;
 import com.library.model.entity.Role;
 import com.library.security.AuthenticatedUser;
+import com.library.security.UserContext;
 import com.library.interceptor.AuthenticationInterceptor;
 import com.library.security.JwtService;
 import com.library.service.BorrowService;
@@ -33,7 +34,10 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.options;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -214,6 +218,49 @@ class ApiSecurityWebTest {
         mockMvc.perform(get("/book").header("Authorization", "Bearer "))
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.code").value(401));
+        mockMvc.perform(get("/book").header("Authorization", "Bearer"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value(401));
+    }
+
+    @Test
+    void invalidTokenReturns401() throws Exception {
+        when(jwtService.parseToken("invalid-token"))
+                .thenThrow(new io.jsonwebtoken.MalformedJwtException("invalid"));
+
+        mockMvc.perform(get("/book").header("Authorization", "Bearer invalid-token"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value(401));
+    }
+
+    @Test
+    void corsPreflightDoesNotRequireAuthentication() throws Exception {
+        mockMvc.perform(options("/book")
+                        .header("Origin", "http://localhost:3000")
+                        .header("Access-Control-Request-Method", "GET"))
+                .andExpect(status().isOk())
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers
+                        .header().string("Access-Control-Allow-Origin", "http://localhost:3000"));
+    }
+
+    @Test
+    void userCannotReadAdminBorrowEndpoint() throws Exception {
+        mockMvc.perform(get("/admin/borrow").header("Authorization", "Bearer user-token"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value(403));
+        verify(borrowService, never()).allRecords(any());
+    }
+
+    @Test
+    void userContextIsClearedAfterControllerFailure() throws Exception {
+        when(bookService.getById(1)).thenThrow(new IllegalStateException("boom"));
+
+        mockMvc.perform(get("/book/1").header("Authorization", "Bearer user-token"))
+                .andExpect(status().isInternalServerError());
+
+        assertThatThrownBy(UserContext::getRequiredUser)
+                .isInstanceOfSatisfying(BusinessException.class,
+                        exception -> assertThat(exception.getStatus()).isEqualTo(HttpStatus.UNAUTHORIZED));
     }
 
     @Test

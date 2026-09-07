@@ -81,7 +81,7 @@ CREATE TABLE borrow_records (
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     PRIMARY KEY (id),
     KEY idx_borrow_user_status_time (user_id, status, borrow_time),
-    KEY idx_borrow_book_id (book_id),
+    KEY idx_borrow_book_status (book_id, status),
     KEY idx_borrow_status_due (status, due_time),
     CONSTRAINT fk_borrow_user FOREIGN KEY (user_id) REFERENCES users (id),
     CONSTRAINT fk_borrow_book FOREIGN KEY (book_id) REFERENCES books (id),

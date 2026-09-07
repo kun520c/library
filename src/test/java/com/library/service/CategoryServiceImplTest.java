@@ -68,6 +68,29 @@ class CategoryServiceImplTest {
     }
 
     @Test
+    void updatesExistingCategory() {
+        when(categoryMapper.selectByIdForUpdate(2)).thenReturn(category());
+        when(categoryMapper.existsByNameAndIdNot("Backend", 2)).thenReturn(false);
+        when(categoryMapper.update(any())).thenReturn(1);
+
+        service.update(2, new CategoryDTO(" Backend "));
+
+        verify(categoryMapper).update(org.mockito.ArgumentMatchers.argThat(
+                category -> category.getId() == 2 && "Backend".equals(category.getName())));
+    }
+
+    @Test
+    void deletesUnusedCategory() {
+        when(categoryMapper.selectByIdForUpdate(2)).thenReturn(category());
+        when(bookMapper.countActiveByCategoryId(2)).thenReturn(0L);
+        when(categoryMapper.deleteById(2)).thenReturn(1);
+
+        service.delete(2);
+
+        verify(categoryMapper).deleteById(2);
+    }
+
+    @Test
     void listsOnlyMapperProvidedActiveCategories() {
         when(categoryMapper.selectAll()).thenReturn(List.of(category()));
 

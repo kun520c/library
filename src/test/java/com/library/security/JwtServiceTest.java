@@ -89,4 +89,11 @@ class JwtServiceTest {
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("至少需要32字节");
     }
+
+    @Test
+    void rejectsEmptySecretAtStartup() {
+        assertThatThrownBy(() -> new JwtService(new JwtProperties("", Duration.ofHours(1))))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("至少需要32字节");
+    }
 }

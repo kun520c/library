@@ -21,6 +21,11 @@ public interface BookMapper {
             "FROM books WHERE id = #{id} AND is_deleted = 0")
     Book selectById(@Param("id") Integer id);
 
+    /** 锁定未删除图书，协调借阅、归还与删除操作 */
+    @Select("SELECT id, title, author, isbn, price, stock, category_id, is_deleted, created_at, updated_at " +
+            "FROM books WHERE id = #{id} AND is_deleted = 0 FOR UPDATE")
+    Book selectByIdForUpdate(@Param("id") Integer id);
+
     /** 新增图书 */
     @Insert("INSERT INTO books(title, author, isbn, price, stock, category_id) " +
             "VALUES(#{title}, #{author}, #{isbn}, #{price}, #{stock}, #{categoryId})")

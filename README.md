@@ -28,7 +28,7 @@
 - 用户注册：账号唯一，密码 BCrypt 哈希，固定创建 `USER`。
 - 用户登录：账号密码校验，签发包含 `userId`、`username`、`role` 的 JWT。
 - 当前用户：安全返回用户基本信息，不返回密码。
-- 图书管理：分页筛选、详情、新增、更新、逻辑删除、活动 ISBN 唯一。
+- 图书管理：分页筛选、详情、新增、更新、逻辑删除、活动 ISBN 唯一；存在未归还记录时拒绝删除。
 - 分类管理：一级分类 CRUD、活动名称唯一、在用分类禁止删除。
 - 借书：30 天借期，条件 UPDATE 原子扣库存，事务内创建借阅记录。
 - 还书：所有权校验，条件 UPDATE 防重复归还，事务内恢复库存。
@@ -125,15 +125,14 @@ sql/                         全新建库和升级脚本
 - 图书更新、删除、借书和还书只在数据库事务提交成功后删除详情缓存。
 - 分页条件组合多且失效范围大，因此不缓存；原来的无调用 `book:list` 路径已删除。
 
-这是简单的 Cache-Aside，没有引入分布式锁。短 TTL、空值标记和数据库兜底足以覆盖当前项目规模。
+这是简单的 **Cache Aside + 最终一致性**，不是强一致缓存。事务提交与缓存删除之间、或 Redis 删除失败后的 TTL 窗口内可能短暂读到旧值；项目通过提交后删除、短 TTL 和数据库兜底收敛，没有引入分布式锁或消息队列。
 
 ## 数据库初始化与升级
 
 - 全新数据库：执行 [`sql/schema.sql`](sql/schema.sql)。
 - 从原始 `User` / `Book` 表迁移：备份并人工审核后执行 [`sql/migration-from-legacy.sql`](sql/migration-from-legacy.sql)。
-- 从已经具有 `users` / `books`、角色和活动 ISBN 的上一版升级：执行 [`sql/upgrade_v2.sql`](sql/upgrade_v2.sql)。
 
-脚本不会由应用自动迁移现有数据库，也不包含破坏性的 `DROP TABLE`。升级脚本会为旧 `category_id` 创建“迁移分类-ID”占位分类，启动后可通过分类接口改名。
+仓库没有发布过可验证的“已具备 `users` / `books`、角色和活动 ISBN，但缺少分类借阅闭环”的数据库基线，因此不保留仅服务开发中间状态的 `upgrade_v2.sql`。迁移脚本不会由应用自动执行，也不会删除现有数据；它会为旧 `category_id` 创建“迁移分类-ID”占位分类，启动后可通过分类接口改名。
 
 主要约束和索引：
 
@@ -217,7 +216,7 @@ Compose 首次创建 MySQL Volume 时自动执行 `sql/schema.sql`。已有 Volu
 | GET | `/book/{id}` | USER/ADMIN | 图书详情 |
 | POST | `/book` | ADMIN | 新增图书 |
 | PUT | `/book/{id}` | ADMIN | 更新图书 |
-| DELETE | `/book/{id}` | ADMIN | 逻辑删除图书 |
+| DELETE | `/book/{id}` | ADMIN | 逻辑删除图书；存在未归还记录时返回 409 |
 | GET | `/category` | USER/ADMIN | 分类列表 |
 | GET | `/category/{id}` | USER/ADMIN | 分类详情 |
 | POST | `/category` | ADMIN | 新增分类 |
@@ -264,7 +263,7 @@ local profile 默认开放：
 .\mvnw.cmd -B clean verify
 ```
 
-Linux/macOS 将 `.\mvnw.cmd` 替换为 `./mvnw`。测试不依赖外部 MySQL 或 Redis：大部分逻辑使用 Mockito，事务回滚与并发库存使用测试作用域内的 H2。覆盖注册/登录/BCrypt、JWT、Bearer 边界、角色权限、DTO 校验、ISBN 冲突、图书缓存降级、分类约束、借书/还书、重复归还、越权归还、事务回滚和并发不超卖。
+Linux/macOS 将 `.\mvnw.cmd` 替换为 `./mvnw`。测试不依赖外部 MySQL 或 Redis：大部分逻辑使用 Mockito，事务回滚与并发库存使用测试作用域内的 H2。覆盖注册/登录/BCrypt、JWT、Bearer 边界、角色权限、OPTIONS/CORS、DTO 校验、ISBN 冲突、图书缓存降级、分类约束、借书/还书、重复与并发归还、越权归还、借阅中禁止删书、事务回滚，以及库存为 1 时的数据库级并发不超卖。
 
 ## 当前范围
 

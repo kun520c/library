@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.library.config.properties.CacheProperties;
 import com.library.exception.BusinessException;
 import com.library.mapper.BookMapper;
+import com.library.mapper.BorrowRecordMapper;
 import com.library.mapper.CategoryMapper;
 import com.library.model.dto.BookDTO;
 import com.library.model.dto.BookPageDTO;
@@ -26,6 +27,7 @@ import java.util.List;
 @RequiredArgsConstructor
 public class BookServiceImpl implements BookService {
     private final BookMapper bookMapper;
+    private final BorrowRecordMapper borrowRecordMapper;
     private final CategoryMapper categoryMapper;
     private final StringRedisTemplate redisTemplate;
     private final ObjectMapper objectMapper;
@@ -101,6 +103,12 @@ public class BookServiceImpl implements BookService {
     @Override
     @Transactional
     public void delete(Integer id) {
+        if (bookMapper.selectByIdForUpdate(id) == null) {
+            throw notFound();
+        }
+        if (borrowRecordMapper.existsBorrowedByBookId(id)) {
+            throw new BusinessException(HttpStatus.CONFLICT, "该图书当前存在未归还借阅记录，不能删除");
+        }
         if (bookMapper.deleteById(id) == 0) {
             throw notFound();
         }
