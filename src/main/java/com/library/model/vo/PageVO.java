@@ -11,7 +11,9 @@ import java.util.List;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class PageVO {
-    List<BookVO> bookList;
-    long total;
+public class PageVO<T> {
+    private List<T> list;
+    private long total;
+    private int page;
+    private int size;
 }

@@ -1,0 +1,23 @@
+spring:
+  datasource:
+    url: ${DB_URL:jdbc:mysql://localhost:3307/library?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai}
+    username: ${DB_USERNAME:library}
+    password: ${DB_PASSWORD:library_dev_password}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:local_redis_password}
+
+library:
+  jwt:
+    secret: ${JWT_SECRET:replace-with-at-least-32-byte-local-secret}
+  cors:
+    allowed-origins:
+      - http://localhost:3000
+      - http://localhost:5173
+
+logging:
+  level:
+    com.library.mapper: debug

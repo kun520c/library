@@ -6,6 +6,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 
 /**
  * 图书实体类
@@ -23,4 +24,6 @@ public class Book {
     private Integer stock;
     private Integer categoryId;
     private Integer isDeleted;
+    private LocalDateTime createdAt;
+    private LocalDateTime updatedAt;
 }

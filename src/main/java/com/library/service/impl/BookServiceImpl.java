@@ -1,202 +1,164 @@
 package com.library.service.impl;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.library.config.properties.CacheProperties;
 import com.library.exception.BusinessException;
 import com.library.mapper.BookMapper;
-import com.library.model.entity.Book;
+import com.library.mapper.CategoryMapper;
 import com.library.model.dto.BookDTO;
 import com.library.model.dto.BookPageDTO;
+import com.library.model.entity.Book;
 import com.library.model.vo.BookVO;
+import com.library.model.vo.PageVO;
 import com.library.service.BookService;
+import com.library.service.BookCacheInvalidator;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.transaction.support.TransactionSynchronization;
-import org.springframework.transaction.support.TransactionSynchronizationManager;
-import java.util.List;
-import java.util.concurrent.TimeUnit;
-import java.util.stream.Collectors;
 
-/**
- * 图书 Service 实现类
- */
+import java.util.List;
+
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class BookServiceImpl implements BookService {
-
     private final BookMapper bookMapper;
-
+    private final CategoryMapper categoryMapper;
     private final StringRedisTemplate redisTemplate;
-
     private final ObjectMapper objectMapper;
-
-    private static final String BOOK_LIST_KEY = "book:list";
-
-    private static final String BOOK_KEY_PREFIX = "book:";
+    private final CacheProperties cacheProperties;
+    private final BookCacheInvalidator cacheInvalidator;
 
     @Override
-    public List<BookVO> list() {
-        try {
-            String cache = redisTemplate.opsForValue().get(BOOK_LIST_KEY);
-            if (cache != null) {
-                return objectMapper.readValue(cache, new TypeReference<List<BookVO>>() {});
-            }
-        } catch (Exception e) {
-            log.warn("缓存解析失败",e);
-        }
-
-        List<BookVO> list = bookMapper.selectAll().stream()
-                .map(this::toVO)
-                .collect(Collectors.toList());
-
-        try {
-            redisTemplate.opsForValue().set(BOOK_LIST_KEY, objectMapper.writeValueAsString(list), 10, TimeUnit.MINUTES);
-        } catch (Exception ignored) {
-            log.warn("缓存写入失败",ignored);
-        }
-        return list;
-    }
-
-    @Override
+    @Transactional(readOnly = true)
     public BookVO getById(Integer id) {
-        String KEY = BOOK_KEY_PREFIX + id;
-
-        try {
-            String cache = redisTemplate.opsForValue().get(KEY);
-            if (cache != null) {
-                if ("null".equals(cache)) {
-                    throw new BusinessException(404, "图书不存在");
-                }
-                return objectMapper.readValue(cache, BookVO.class);
+        String cacheKey = cacheKey(id);
+        String cachedValue = readCache(cacheKey);
+        if (cachedValue != null) {
+            if (cacheProperties.nullValue().equals(cachedValue)) {
+                throw notFound();
             }
-        } catch (BusinessException e) {
-            throw e;
-        } catch (Exception e) {
-            log.warn("缓存解析失败", e);
+            try {
+                return objectMapper.readValue(cachedValue, BookVO.class);
+            } catch (Exception exception) {
+                log.warn("图书缓存JSON损坏，将删除并回源数据库，bookId={}, reason={}", id, exception.getMessage());
+                deleteCache(cacheKey);
+            }
         }
 
         Book book = bookMapper.selectById(id);
-
         if (book == null) {
-            try {
-                redisTemplate.opsForValue().set(KEY,"null",1,TimeUnit.MINUTES);
-            }catch (Exception ignored){
-                log.warn("缓存写入失败",ignored);
-            }
-            throw new BusinessException(404, "图书不存在");
+            writeCache(cacheKey, cacheProperties.nullValue(), cacheProperties.nullTtl());
+            throw notFound();
         }
 
+        BookVO bookVO = toVO(book);
         try {
-            redisTemplate.opsForValue().set(KEY,objectMapper.writeValueAsString(toVO(book)),10,TimeUnit.MINUTES);
-        }catch (Exception ignored){
-            log.warn("写入缓存失败",ignored);
+            writeCache(cacheKey, objectMapper.writeValueAsString(bookVO), cacheProperties.ttl());
+        } catch (Exception exception) {
+            log.warn("图书缓存序列化失败，bookId={}, reason={}", id, exception.getMessage());
         }
-
-
-        return toVO(book);
-    }
-
-    public Book getByIsbn(String isbn){
-        Book book = bookMapper.selectByIsbn(isbn);
-        return book;
+        return bookVO;
     }
 
     @Override
     @Transactional
     public void add(BookDTO dto) {
-        if(getByIsbn(dto.getIsbn()) == null){
-            Book book = toEntity(dto);
-            bookMapper.insert(book);
-            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
-                @Override
-                public void afterCommit() {
-                    clearListCache();
-                }
-            });
-        }else{
-            throw new BusinessException(409,"该书已存入");
+        validateCategory(dto.getCategoryId());
+        if (bookMapper.existsByIsbn(dto.getIsbn())) {
+            throw new BusinessException(HttpStatus.CONFLICT, "ISBN已存在");
+        }
+        Book book = toEntity(dto);
+        if (bookMapper.insert(book) != 1) {
+            throw new IllegalStateException("新增图书未写入数据库");
+        }
+        if (book.getId() != null) {
+            cacheInvalidator.evictAfterCommit(book.getId());
         }
     }
 
     @Override
     @Transactional
     public void update(Integer id, BookDTO dto) {
-        Book exist = bookMapper.selectById(id);
-        String KEY = BOOK_KEY_PREFIX + id;
-        if (exist == null) {
-            throw new BusinessException(404, "图书不存在");
+        if (bookMapper.selectById(id) == null) {
+            throw notFound();
+        }
+        validateCategory(dto.getCategoryId());
+        if (bookMapper.existsByIsbnAndIdNot(dto.getIsbn(), id)) {
+            throw new BusinessException(HttpStatus.CONFLICT, "ISBN已被其他图书使用");
         }
         Book book = toEntity(dto);
         book.setId(id);
-        bookMapper.update(book);
-        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
-            @Override
-            public void afterCommit() {
-                clearListCache();
-                clearIdCache(KEY);
-            }
-        });
+        if (bookMapper.update(book) == 0) {
+            throw notFound();
+        }
+        cacheInvalidator.evictAfterCommit(id);
     }
 
     @Override
     @Transactional
     public void delete(Integer id) {
-        Book exist = bookMapper.selectById(id);
-        String KEY = BOOK_KEY_PREFIX + id;
-        if (exist == null) {
-            throw new BusinessException(404, "图书不存在");
+        if (bookMapper.deleteById(id) == 0) {
+            throw notFound();
         }
-        bookMapper.deleteById(id);
-        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
-            @Override
-            public void afterCommit() {
-                clearListCache();
-                clearIdCache(KEY);
-            }
-        });
+        cacheInvalidator.evictAfterCommit(id);
     }
 
-
-
     @Override
-    public List<BookVO> search(BookPageDTO dto) {
-        int offset = (dto.getPage() - 1) * dto.getSize();
-        return bookMapper.selectByCondition(dto.getTitle(), dto.getAuthor(),
-                        dto.getIsbn(), dto.getCategoryId(), offset, dto.getSize())
+    @Transactional(readOnly = true)
+    public PageVO<BookVO> page(BookPageDTO dto) {
+        long offset = ((long) dto.getPage() - 1L) * dto.getSize();
+        List<BookVO> books = bookMapper.selectByCondition(
+                        dto.getTitle(), dto.getAuthor(), dto.getIsbn(), dto.getCategoryId(), offset, dto.getSize())
                 .stream()
                 .map(this::toVO)
-                .collect(Collectors.toList());
+                .toList();
+        long total = bookMapper.countByCondition(dto.getTitle(), dto.getAuthor(), dto.getIsbn(), dto.getCategoryId());
+        return new PageVO<>(books, total, dto.getPage(), dto.getSize());
     }
 
-    @Override
-    public Long count(BookPageDTO dto) {
-        return bookMapper.countByCondition(dto.getTitle(), dto.getAuthor(),
-                dto.getIsbn(), dto.getCategoryId());
-    }
-
-    /** 清除列表缓存 */
-    private void clearListCache() {
+    private String readCache(String cacheKey) {
         try {
-            redisTemplate.delete(BOOK_LIST_KEY);
-        } catch (Exception ignored) {
-            log.warn("缓存删除失败",ignored);
+            return redisTemplate.opsForValue().get(cacheKey);
+        } catch (Exception exception) {
+            log.warn("Redis读取失败，将回源数据库，cacheKey={}, reason={}", cacheKey, exception.getMessage());
+            return null;
         }
     }
 
-    private void clearIdCache(String KEY){
+    private void writeCache(String cacheKey, String value, java.time.Duration ttl) {
         try {
-            redisTemplate.delete(KEY);
-        }catch (Exception ignored) {
-            log.warn("缓存删除失败",ignored);
+            redisTemplate.opsForValue().set(cacheKey, value, ttl);
+        } catch (Exception exception) {
+            log.warn("Redis写入失败，cacheKey={}, reason={}", cacheKey, exception.getMessage());
         }
     }
 
-    /** Entity → VO */
+    private void deleteCache(String cacheKey) {
+        try {
+            redisTemplate.delete(cacheKey);
+        } catch (Exception exception) {
+            log.warn("Redis删除失败，cacheKey={}, reason={}", cacheKey, exception.getMessage());
+        }
+    }
+
+    private void validateCategory(Integer categoryId) {
+        if (categoryId != null && categoryMapper.selectByIdForUpdate(categoryId) == null) {
+            throw new BusinessException(HttpStatus.BAD_REQUEST, "分类不存在");
+        }
+    }
+
+    private String cacheKey(Integer id) {
+        return cacheProperties.keyPrefix() + id;
+    }
+
+    private BusinessException notFound() {
+        return new BusinessException(HttpStatus.NOT_FOUND, "图书不存在");
+    }
+
     private BookVO toVO(Book book) {
         return BookVO.builder()
                 .id(book.getId())
@@ -209,7 +171,6 @@ public class BookServiceImpl implements BookService {
                 .build();
     }
 
-    /** DTO → Entity */
     private Book toEntity(BookDTO dto) {
         return Book.builder()
                 .title(dto.getTitle())

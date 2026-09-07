@@ -1,7 +1,31 @@
 spring:
   datasource:
     url: ${DB_URL}
+    username: ${DB_USERNAME}
     password: ${DB_PASSWORD}
+    driver-class-name: com.mysql.cj.jdbc.Driver
   data:
     redis:
       host: ${REDIS_HOST}
+      port: ${REDIS_PORT}
+      password: ${REDIS_PASSWORD}
+
+library:
+  jwt:
+    secret: ${JWT_SECRET}
+  cors:
+    allowed-origins: ${CORS_ALLOWED_ORIGINS}
+
+logging:
+  level:
+    root: info
+    com.library: info
+
+springdoc:
+  api-docs:
+    enabled: false
+  swagger-ui:
+    enabled: false
+
+knife4j:
+  enable: false

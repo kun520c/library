@@ -5,8 +5,8 @@
 <mapper namespace="com.library.mapper.BookMapper">
 
     <select id="selectByCondition" resultType="com.library.model.entity.Book">
-        SELECT id, title, author, isbn, price, stock, category_id, is_deleted
-        FROM Book
+        SELECT id, title, author, isbn, price, stock, category_id, is_deleted, created_at, updated_at
+        FROM books
         <where>
             is_deleted = 0
             <if test="title != null and title != ''">
@@ -16,7 +16,7 @@
                 AND author LIKE CONCAT('%', #{author}, '%')
             </if>
             <if test="isbn != null and isbn != ''">
-                AND isbn LIKE CONCAT('%', #{isbn}, '%')
+                AND isbn = #{isbn}
             </if>
             <if test="categoryId != null">
                 AND category_id = #{categoryId}
@@ -28,7 +28,7 @@
 
     <select id="countByCondition" resultType="java.lang.Long">
         SELECT COUNT(*)
-        FROM Book
+        FROM books
         <where>
             is_deleted = 0
             <if test="title != null and title != ''">
@@ -38,7 +38,7 @@
                 AND author LIKE CONCAT('%', #{author}, '%')
             </if>
             <if test="isbn != null and isbn != ''">
-                AND isbn LIKE CONCAT('%', #{isbn}, '%')
+                AND isbn = #{isbn}
             </if>
             <if test="categoryId != null">
                 AND category_id = #{categoryId}

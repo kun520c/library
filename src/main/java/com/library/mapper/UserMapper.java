@@ -1,14 +1,24 @@
 package com.library.mapper;
 
 import com.library.model.entity.User;
-import org.apache.ibatis.annotations.*;
+import org.apache.ibatis.annotations.Insert;
+import org.apache.ibatis.annotations.Mapper;
+import org.apache.ibatis.annotations.Options;
+import org.apache.ibatis.annotations.Param;
+import org.apache.ibatis.annotations.Select;
 
 @Mapper
 public interface UserMapper {
-    @Insert("INSERT INTO `User`(username, account, password) VALUES(#{username}, #{account}, #{password})")
+    @Insert("INSERT INTO users(username, account, password, role) VALUES(#{username}, #{account}, #{password}, #{role})")
     @Options(useGeneratedKeys = true, keyProperty = "id")
-    void register(User user);
+    int insert(User user);
 
-    @Select("SELECT id, username, account, password FROM `User` WHERE account = #{account}")
-    User getUserByAccount(@Param("account") String account);
+    @Select("SELECT id, username, account, password, role FROM users WHERE account = #{account}")
+    User findByAccount(@Param("account") String account);
+
+    @Select("SELECT id, username, account, role FROM users WHERE id = #{id}")
+    User findById(@Param("id") Integer id);
+
+    @Select("SELECT EXISTS(SELECT 1 FROM users WHERE account = #{account})")
+    boolean existsByAccount(@Param("account") String account);
 }

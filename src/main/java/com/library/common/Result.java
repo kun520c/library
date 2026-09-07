@@ -1,51 +1,25 @@
 package com.library.common;
 
-import com.library.model.vo.BookVO;
-import com.library.model.vo.PageVO;
-import lombok.Data;
-import java.util.List;
+import lombok.AllArgsConstructor;
+import lombok.Getter;
+import org.springframework.http.HttpStatus;
 
-@Data
-public class Result {
-    private Integer code;
+@Getter
+@AllArgsConstructor
+public class Result<T> {
+    private int code;
     private String message;
-    private Object data;
+    private T data;
 
-    public static Result success(Object data){
-        Result r = new Result();
-        r.code = 200;
-        r.message = "success";
-        r.data = data;
-        return r;
+    public static <T> Result<T> success(T data) {
+        return new Result<>(HttpStatus.OK.value(), "success", data);
     }
 
-    public static Result success(){
-        Result r = new Result();
-        r.code = 200;
-        r.message = "success";
-        return r;
+    public static Result<Void> success() {
+        return new Result<>(HttpStatus.OK.value(), "success", null);
     }
 
-    public static Result error(Integer code,String message){
-        Result r = new Result();
-        r.code = code;
-        r.message = message;
-        return r;
-    }
-
-    public static Result error(String message) {
-        Result r = new Result();
-        r.code = 500;
-        r.message = message;
-        return r;
-    }
-
-    public static Result page(List<BookVO> list,long total){
-        Result r = new Result();
-        PageVO pageVO = new PageVO(list,total);
-        r.code = 200;
-        r.message = "success";
-        r.data = pageVO;
-        return r;
+    public static Result<Void> error(HttpStatus status, String message) {
+        return new Result<>(status.value(), message, null);
     }
 }

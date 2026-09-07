@@ -3,16 +3,12 @@ package com.library.service;
 import com.library.model.dto.BookDTO;
 import com.library.model.dto.BookPageDTO;
 import com.library.model.vo.BookVO;
-
-import java.util.List;
+import com.library.model.vo.PageVO;
 
 /**
  * 图书 Service 接口
  */
 public interface BookService {
-
-    /** 查询所有图书 */
-    List<BookVO> list();
 
     /** 根据ID查询图书 */
     BookVO getById(Integer id);
@@ -27,8 +23,5 @@ public interface BookService {
     void delete(Integer id);
 
     /** 分页条件查询图书 */
-    List<BookVO> search(BookPageDTO dto);
-
-    /** 分页条件查询图书总数 */
-    Long count(BookPageDTO dto);
+    PageVO<BookVO> page(BookPageDTO dto);
 }
