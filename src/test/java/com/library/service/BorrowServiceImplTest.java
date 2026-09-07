@@ -155,6 +155,46 @@ class BorrowServiceImplTest {
         assertThat(page.getTotal()).isEqualTo(1);
     }
 
+    @Test
+    void userCanReadOwnOverdueBorrowDetail() {
+        BorrowRecordVO detail = detail(1, BorrowStatus.BORROWED, LocalDateTime.now(CLOCK).minusMinutes(1));
+        when(borrowRecordMapper.selectDetailById(9L)).thenReturn(detail);
+
+        BorrowRecordVO result = service.getById(9L);
+
+        assertThat(result).isSameAs(detail);
+        assertThat(result.isOverdue()).isTrue();
+    }
+
+    @Test
+    void adminCanReadAnotherUsersBorrowDetail() {
+        UserContext.set(new AuthenticatedUser(10, "admin", Role.ADMIN));
+        when(borrowRecordMapper.selectDetailById(9L))
+                .thenReturn(detail(2, BorrowStatus.BORROWED, LocalDateTime.now(CLOCK).plusDays(1)));
+
+        BorrowRecordVO result = service.getById(9L);
+
+        assertThat(result.getUserId()).isEqualTo(2);
+        assertThat(result.isOverdue()).isFalse();
+    }
+
+    @Test
+    void userCannotReadAnotherUsersBorrowDetail() {
+        when(borrowRecordMapper.selectDetailById(9L))
+                .thenReturn(detail(2, BorrowStatus.BORROWED, LocalDateTime.now(CLOCK).minusDays(1)));
+
+        assertThatThrownBy(() -> service.getById(9L)).isInstanceOfSatisfying(BusinessException.class,
+                exception -> assertThat(exception.getStatus()).isEqualTo(HttpStatus.FORBIDDEN));
+    }
+
+    @Test
+    void missingBorrowDetailReturns404() {
+        when(borrowRecordMapper.selectDetailById(99L)).thenReturn(null);
+
+        assertThatThrownBy(() -> service.getById(99L)).isInstanceOfSatisfying(BusinessException.class,
+                exception -> assertThat(exception.getStatus()).isEqualTo(HttpStatus.NOT_FOUND));
+    }
+
     private Book book() {
         return Book.builder().id(7).title("Java").stock(1).isDeleted(0).build();
     }
@@ -166,6 +206,19 @@ class BorrowServiceImplTest {
         record.setBookId(7);
         record.setStatus(status);
         return record;
+    }
+
+    private BorrowRecordVO detail(Integer userId, BorrowStatus status, LocalDateTime dueTime) {
+        return BorrowRecordVO.builder()
+                .recordId(9L)
+                .bookId(7)
+                .bookTitle("Java")
+                .userId(userId)
+                .username("reader")
+                .borrowTime(dueTime.minusDays(30))
+                .dueTime(dueTime)
+                .status(status)
+                .build();
     }
 
     private void assertConflict(org.assertj.core.api.ThrowableAssert.ThrowingCallable callable) {

@@ -92,6 +92,21 @@ public class BorrowServiceImpl implements BorrowService {
 
     @Override
     @Transactional(readOnly = true)
+    public BorrowRecordVO getById(Long recordId) {
+        AuthenticatedUser user = UserContext.getRequiredUser();
+        BorrowRecordVO record = borrowRecordMapper.selectDetailById(recordId);
+        if (record == null) {
+            throw new BusinessException(HttpStatus.NOT_FOUND, "借阅记录不存在");
+        }
+        if (user.role() != Role.ADMIN && !record.getUserId().equals(user.userId())) {
+            throw new BusinessException(HttpStatus.FORBIDDEN, "不能查看其他用户的借阅记录");
+        }
+        applyOverdue(record, LocalDateTime.now(clock));
+        return record;
+    }
+
+    @Override
+    @Transactional(readOnly = true)
     public PageVO<BorrowRecordVO> myRecords(BorrowPageDTO dto) {
         return page(UserContext.getRequiredUser().userId(), dto);
     }
@@ -111,10 +126,14 @@ public class BorrowServiceImpl implements BorrowService {
         List<BorrowRecordVO> records = borrowRecordMapper.selectByCondition(
                 userId, dto.getStatus(), dto.getBookTitle(), offset, dto.getSize());
         LocalDateTime now = LocalDateTime.now(clock);
-        records.forEach(record -> record.setOverdue(record.getStatus() == BorrowStatus.BORROWED
-                && record.getDueTime() != null
-                && record.getDueTime().isBefore(now)));
+        records.forEach(record -> applyOverdue(record, now));
         long total = borrowRecordMapper.countByCondition(userId, dto.getStatus(), dto.getBookTitle());
         return new PageVO<>(records, total, dto.getPage(), dto.getSize());
+    }
+
+    private void applyOverdue(BorrowRecordVO record, LocalDateTime now) {
+        record.setOverdue(record.getStatus() == BorrowStatus.BORROWED
+                && record.getDueTime() != null
+                && record.getDueTime().isBefore(now));
     }
 }

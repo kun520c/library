@@ -9,6 +9,8 @@ public interface BorrowService {
 
     void returnBook(Long recordId);
 
+    BorrowRecordVO getById(Long recordId);
+
     PageVO<BorrowRecordVO> myRecords(BorrowPageDTO dto);
 
     PageVO<BorrowRecordVO> allRecords(BorrowPageDTO dto);

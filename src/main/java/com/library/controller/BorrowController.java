@@ -42,6 +42,13 @@ public class BorrowController {
         return Result.success();
     }
 
+    @Operation(summary = "查询借阅记录详情")
+    @GetMapping("/borrow/{recordId}")
+    public Result<BorrowRecordVO> getById(
+            @PathVariable @Positive(message = "借阅记录ID必须为正数") Long recordId) {
+        return Result.success(borrowService.getById(recordId));
+    }
+
     @Operation(summary = "分页查询我的借阅记录")
     @GetMapping("/borrow/my")
     public Result<PageVO<BorrowRecordVO>> myRecords(@Valid BorrowPageDTO dto) {

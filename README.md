@@ -27,12 +27,13 @@
 
 - 用户注册：账号唯一，密码 BCrypt 哈希，固定创建 `USER`。
 - 用户登录：账号密码校验，签发包含 `userId`、`username`、`role` 的 JWT。
-- 当前用户：安全返回用户基本信息，不返回密码。
+- 当前用户：安全返回用户基本信息，并允许只修改自己的用户名，不返回密码。
+- 管理员用户查询：按用户名、账号筛选并稳定分页，不查询或返回密码。
 - 图书管理：分页筛选、详情、新增、基本信息更新、原子库存调整、逻辑删除、活动 ISBN 唯一；存在未归还记录时拒绝删除。
 - 分类管理：一级分类 CRUD、活动名称唯一、在用分类禁止删除。
 - 借书：30 天借期，条件 UPDATE 原子扣库存，事务内创建借阅记录。
 - 还书：所有权校验，条件 UPDATE 防重复归还，事务内恢复库存。
-- 借阅记录：用户查询自己的记录，管理员查询全部记录，支持状态和书名筛选。
+- 借阅记录：用户查询自己的列表和详情，管理员查询全部列表及任意详情；列表支持状态和书名筛选。
 - Redis 降级：缓存异常只记录日志，图书详情查询仍回源 MySQL。
 - 统一响应：`Result<T>` 与 `PageVO<T>`，错误 HTTP Status 和响应 `code` 一致。
 
@@ -43,10 +44,12 @@
 | 注册、登录 | 允许 | 允许 | 允许 |
 | 查询图书、分类 | - | 允许 | 允许 |
 | 查看 `/user/me` | - | 允许 | 允许 |
+| 修改自己的用户名 | - | 允许 | 允许 |
 | 借书、归还自己的记录、查看自己的借阅记录 | - | 允许 | 允许 |
 | 新增、修改、调整库存、删除图书 | - | - | 允许 |
 | 新增、修改、删除分类 | - | - | 允许 |
-| 查询全部借阅记录、代用户还书 | - | - | 允许 |
+| 查询全部借阅记录、任意借阅详情、代用户还书 | - | - | 允许 |
+| 分页查询用户 | - | - | 允许 |
 
 普通注册接口的 DTO 不包含 `role`，并启用了未知 JSON 字段拒绝策略，因此不能通过注册请求创建 ADMIN。管理员由维护者在数据库中设置：
 
@@ -86,6 +89,8 @@ sql/                         全新建库和升级脚本
 6. 请求完成后调用 `ThreadLocal.remove()`，避免线程池复用造成身份泄漏。
 
 缺失、格式错误、空、非法或过期 Token 返回 HTTP 401；身份有效但权限不足返回 HTTP 403。
+
+`PUT /user/me` 修改用户名后，数据库中的用户资料及后续 `/user/me` 查询会立即返回新用户名。已经签发的 JWT 不会主动刷新，其中的 `username` claim 在 Token 过期前可能仍是旧值；需要最新用户名的业务查询以数据库为准，本项目没有实现 Token 撤销、Refresh Token 或 Session。
 
 ### 借书
 
@@ -232,6 +237,8 @@ Compose 首次创建 MySQL Volume 时自动执行 `sql/schema.sql`。已有 Volu
 | POST | `/user/register` | 公开 | 注册 USER |
 | POST | `/user/login` | 公开 | 登录并返回 Bearer Token |
 | GET | `/user/me` | USER/ADMIN | 当前用户信息 |
+| PUT | `/user/me` | USER/ADMIN | 只修改当前用户的 `username` |
+| GET | `/admin/users` | ADMIN | 用户分页查询，支持用户名、账号筛选 |
 | GET | `/book` | USER/ADMIN | 图书分页筛选 |
 | GET | `/book/{id}` | USER/ADMIN | 图书详情 |
 | POST | `/book` | ADMIN | 新增图书 |
@@ -245,10 +252,11 @@ Compose 首次创建 MySQL Volume 时自动执行 `sql/schema.sql`。已有 Volu
 | DELETE | `/category/{id}` | ADMIN | 删除未被有效图书使用的分类 |
 | POST | `/borrow/{bookId}` | USER/ADMIN | 借书 |
 | POST | `/borrow/{recordId}/return` | USER/ADMIN | 还书；USER 仅限本人 |
+| GET | `/borrow/{recordId}` | USER/ADMIN | 借阅详情；USER 仅限本人，ADMIN 可查任意记录 |
 | GET | `/borrow/my` | USER/ADMIN | 我的借阅记录 |
 | GET | `/admin/borrow` | ADMIN | 全部借阅记录 |
 
-图书分页参数为 `title`、`author`、`isbn`、`categoryId`、`page`、`size`；ISBN 精确匹配，书名和作者模糊匹配。新增图书 DTO 包含初始 `stock`，基本信息更新 DTO 不包含 `stock`，库存调整请求只包含 `delta`。借阅分页支持 `status`、`bookTitle`、`page`、`size`。页码从 1 开始，单页最多 100 条。
+图书分页参数为 `title`、`author`、`isbn`、`categoryId`、`page`、`size`；ISBN 精确匹配，书名和作者模糊匹配。用户分页参数为 `username`、`account`、`page`、`size`，两种文本条件均为模糊匹配，结果按 `id DESC` 稳定排序，且查询列不包含密码。新增图书 DTO 包含初始 `stock`，基本信息更新 DTO 不包含 `stock`，库存调整请求只包含 `delta`。借阅分页支持 `status`、`bookTitle`、`page`、`size`。所有页码从 1 开始，单页最多 100 条。
 
 统一返回结构：
 
@@ -284,7 +292,7 @@ local profile 默认开放：
 .\mvnw.cmd -B clean verify
 ```
 
-Linux/macOS 将 `.\mvnw.cmd` 替换为 `./mvnw`。测试不依赖外部 MySQL 或 Redis：大部分逻辑使用 Mockito，事务回滚与并发库存使用测试作用域内的 H2。覆盖注册/登录/BCrypt、JWT、Bearer 边界、角色权限、OPTIONS/CORS、DTO 校验、ISBN 冲突、图书缓存降级、分类约束、借书/还书、重复与并发归还、越权归还、借阅中禁止删书、事务回滚、库存为 1 时的数据库级并发不超卖，以及管理员库存调整与借书并发时的净增量一致性。
+Linux/macOS 将 `.\mvnw.cmd` 替换为 `./mvnw`。测试不依赖外部 MySQL 或 Redis：大部分逻辑使用 Mockito，事务、分页 SQL 和并发库存使用测试作用域内的 H2。覆盖注册/登录/BCrypt、JWT、Bearer 边界、角色权限、OPTIONS/CORS、DTO 校验、管理员用户分页与筛选、用户名修改、借阅详情所有权与动态逾期、ISBN 冲突、图书缓存降级、分类约束、借书/还书、重复与并发归还、越权归还、借阅中禁止删书、事务回滚、库存为 1 时的数据库级并发不超卖，以及管理员库存调整与借书并发时的净增量一致性。
 
 ## 当前范围
 

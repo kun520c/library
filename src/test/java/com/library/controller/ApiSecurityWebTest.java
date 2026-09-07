@@ -5,6 +5,11 @@ import com.library.config.properties.CorsProperties;
 import com.library.exception.BusinessException;
 import com.library.exception.GlobalExceptionHandler;
 import com.library.model.entity.Role;
+import com.library.model.entity.BorrowStatus;
+import com.library.model.vo.AdminUserVO;
+import com.library.model.vo.BorrowRecordVO;
+import com.library.model.vo.PageVO;
+import com.library.model.vo.UserVO;
 import com.library.security.AuthenticatedUser;
 import com.library.security.UserContext;
 import com.library.interceptor.AuthenticationInterceptor;
@@ -28,6 +33,9 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
+import java.time.LocalDateTime;
+import java.util.List;
+
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
@@ -46,7 +54,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @ActiveProfiles("test")
-@WebMvcTest(controllers = {BookController.class, UserController.class, CategoryController.class, BorrowController.class})
+@WebMvcTest(controllers = {BookController.class, UserController.class, AdminUserController.class,
+        CategoryController.class, BorrowController.class})
 @Import({WebConfig.class, AuthenticationInterceptor.class, GlobalExceptionHandler.class})
 @EnableConfigurationProperties(CorsProperties.class)
 class ApiSecurityWebTest {
@@ -339,5 +348,111 @@ class ApiSecurityWebTest {
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value(400));
         verify(bookService, never()).adjustStock(eq(1), any());
+    }
+
+    @Test
+    void adminCanPageUsersWithoutPasswordInResponse() throws Exception {
+        AdminUserVO user = new AdminUserVO(1, "Reader", "reader", Role.USER,
+                LocalDateTime.of(2026, 9, 7, 10, 0));
+        when(userService.pageUsers(any())).thenReturn(new PageVO<>(List.of(user), 1, 1, 10));
+
+        mockMvc.perform(get("/admin/users?username=Read&account=read")
+                        .header("Authorization", "Bearer admin-token"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.list[0].username").value("Reader"))
+                .andExpect(jsonPath("$.data.list[0].account").value("reader"))
+                .andExpect(jsonPath("$.data.list[0].password").doesNotExist());
+        verify(userService).pageUsers(any());
+    }
+
+    @Test
+    void adminUsersRequiresAuthenticationAndAdminRole() throws Exception {
+        mockMvc.perform(get("/admin/users"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value(401));
+
+        mockMvc.perform(get("/admin/users").header("Authorization", "Bearer user-token"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value(403));
+        verify(userService, never()).pageUsers(any());
+    }
+
+    @Test
+    void invalidAdminUserPaginationReturns400() throws Exception {
+        mockMvc.perform(get("/admin/users?page=0&size=101")
+                        .header("Authorization", "Bearer admin-token"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value(400));
+        verify(userService, never()).pageUsers(any());
+    }
+
+    @Test
+    void authenticatedUserCanRequestBorrowDetailAndInvalidIdReturns400() throws Exception {
+        BorrowRecordVO detail = BorrowRecordVO.builder()
+                .recordId(9L)
+                .bookId(7)
+                .bookTitle("Java")
+                .userId(1)
+                .username("Reader")
+                .status(BorrowStatus.BORROWED)
+                .overdue(true)
+                .build();
+        when(borrowService.getById(9L)).thenReturn(detail);
+
+        mockMvc.perform(get("/borrow/9").header("Authorization", "Bearer user-token"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.recordId").value(9))
+                .andExpect(jsonPath("$.data.overdue").value(true));
+        verify(borrowService).getById(9L);
+
+        mockMvc.perform(get("/borrow/0").header("Authorization", "Bearer user-token"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value(400));
+    }
+
+    @Test
+    void profileUpdateReturnsUpdatedSafeUserView() throws Exception {
+        when(userService.updateProfile(any())).thenReturn(new UserVO(1, "New Name", "reader", Role.USER));
+
+        mockMvc.perform(put("/user/me")
+                        .header("Authorization", "Bearer user-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"username\":\"  New Name  \"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.username").value("New Name"))
+                .andExpect(jsonPath("$.data.account").value("reader"))
+                .andExpect(jsonPath("$.data.password").doesNotExist());
+        verify(userService).updateProfile(any());
+    }
+
+    @Test
+    void profileUpdateRejectsBlankAndOverlongUsername() throws Exception {
+        mockMvc.perform(put("/user/me")
+                        .header("Authorization", "Bearer user-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"username\":\"   \"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value(400));
+
+        mockMvc.perform(put("/user/me")
+                        .header("Authorization", "Bearer user-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"username\":\"" + "x".repeat(51) + "\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value(400));
+        verify(userService, never()).updateProfile(any());
+    }
+
+    @Test
+    void profileUpdateRejectsEveryForbiddenExtraField() throws Exception {
+        for (String field : List.of("role", "account", "password", "id")) {
+            mockMvc.perform(put("/user/me")
+                            .header("Authorization", "Bearer user-token")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"username\":\"New Name\",\"" + field + "\":\"forbidden\"}"))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.code").value(400));
+        }
+        verify(userService, never()).updateProfile(any());
     }
 }

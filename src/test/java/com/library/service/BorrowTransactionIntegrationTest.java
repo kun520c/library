@@ -5,6 +5,7 @@ import com.library.mapper.BookMapper;
 import com.library.model.dto.StockAdjustmentDTO;
 import com.library.model.entity.Book;
 import com.library.model.entity.Role;
+import com.library.model.entity.BorrowStatus;
 import com.library.security.AuthenticatedUser;
 import com.library.security.UserContext;
 import org.junit.jupiter.api.AfterEach;
@@ -24,6 +25,7 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.time.LocalDateTime;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -156,6 +158,25 @@ class BorrowTransactionIntegrationTest {
         bookService.delete(7);
 
         assertThat(jdbcTemplate.queryForObject("SELECT is_deleted FROM books WHERE id = 7", Integer.class)).isEqualTo(1);
+    }
+
+    @Test
+    void borrowDetailJoinReturnsCompleteCurrentDataAndDynamicOverdue() {
+        LocalDateTime dueTime = LocalDateTime.now().minusMinutes(1);
+        jdbcTemplate.update("INSERT INTO borrow_records(id, user_id, book_id, borrow_time, due_time, status) " +
+                        "VALUES(9, 1, 7, ?, ?, 'BORROWED')",
+                dueTime.minusDays(30), dueTime);
+        UserContext.set(new AuthenticatedUser(1, "stale-token-name", Role.USER));
+
+        var detail = borrowService.getById(9L);
+
+        assertThat(detail.getRecordId()).isEqualTo(9L);
+        assertThat(detail.getBookId()).isEqualTo(7);
+        assertThat(detail.getBookTitle()).isEqualTo("Java");
+        assertThat(detail.getUserId()).isEqualTo(1);
+        assertThat(detail.getUsername()).isEqualTo("Reader");
+        assertThat(detail.getStatus()).isEqualTo(BorrowStatus.BORROWED);
+        assertThat(detail.isOverdue()).isTrue();
     }
 
     @Test

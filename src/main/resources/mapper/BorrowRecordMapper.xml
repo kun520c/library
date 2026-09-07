@@ -25,6 +25,16 @@
         LIMIT #{offset}, #{limit}
     </select>
 
+    <select id="selectDetailById" resultType="com.library.model.vo.BorrowRecordVO">
+        SELECT br.id AS record_id, br.book_id, b.title AS book_title,
+               br.user_id, u.username, br.borrow_time, br.due_time,
+               br.return_time, br.status
+        FROM borrow_records br
+        INNER JOIN books b ON b.id = br.book_id
+        INNER JOIN users u ON u.id = br.user_id
+        WHERE br.id = #{id}
+    </select>
+
     <select id="countByCondition" resultType="long">
         SELECT COUNT(*)
         FROM borrow_records br

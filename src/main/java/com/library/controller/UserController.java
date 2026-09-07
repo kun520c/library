@@ -3,6 +3,7 @@ package com.library.controller;
 import com.library.common.Result;
 import com.library.model.dto.LoginDTO;
 import com.library.model.dto.RegisterDTO;
+import com.library.model.dto.UpdateProfileDTO;
 import com.library.model.vo.LoginVO;
 import com.library.model.vo.UserVO;
 import com.library.service.UserService;
@@ -10,10 +11,12 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.validation.annotation.Validated;
-import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -53,5 +56,11 @@ public class UserController {
     @GetMapping("/me")
     public Result<UserVO> me() {
         return Result.success(userService.getCurrentUser());
+    }
+
+    @Operation(summary = "修改当前用户的用户名")
+    @PutMapping("/me")
+    public Result<UserVO> updateMe(@RequestBody @Valid UpdateProfileDTO dto) {
+        return Result.success(userService.updateProfile(dto));
     }
 }

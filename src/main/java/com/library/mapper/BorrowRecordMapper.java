@@ -31,6 +31,8 @@ public interface BorrowRecordMapper {
     @Select("SELECT EXISTS(SELECT 1 FROM borrow_records WHERE book_id = #{bookId} AND status = 'BORROWED')")
     boolean existsBorrowedByBookId(@Param("bookId") Integer bookId);
 
+    BorrowRecordVO selectDetailById(@Param("id") Long id);
+
     List<BorrowRecordVO> selectByCondition(@Param("userId") Integer userId,
                                            @Param("status") BorrowStatus status,
                                            @Param("bookTitle") String bookTitle,
