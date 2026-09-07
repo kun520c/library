@@ -1,8 +1,10 @@
 package com.library.controller;
 
 import com.library.common.Result;
-import com.library.model.dto.BookDTO;
+import com.library.model.dto.BookCreateDTO;
 import com.library.model.dto.BookPageDTO;
+import com.library.model.dto.BookUpdateDTO;
+import com.library.model.dto.StockAdjustmentDTO;
 import com.library.model.entity.Role;
 import com.library.model.vo.BookVO;
 import com.library.model.vo.PageVO;
@@ -20,6 +22,7 @@ import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -72,7 +75,7 @@ public class BookController {
     })
     @PostMapping
     @RequireRole(Role.ADMIN)
-    public Result<Void> add(@RequestBody @Valid BookDTO dto) {
+    public Result<Void> add(@RequestBody @Valid BookCreateDTO dto) {
         bookService.add(dto);
         return Result.success();
     }
@@ -89,8 +92,25 @@ public class BookController {
     @PutMapping("/{id}")
     @RequireRole(Role.ADMIN)
     public Result<Void> update(@PathVariable @Positive(message = "图书ID必须为正数") Integer id,
-                               @RequestBody @Valid BookDTO dto) {
+                               @RequestBody @Valid BookUpdateDTO dto) {
         bookService.update(id, dto);
+        return Result.success();
+    }
+
+    @Operation(summary = "按增量调整图书库存（ADMIN）")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "调整成功"),
+            @ApiResponse(responseCode = "400", description = "参数错误"),
+            @ApiResponse(responseCode = "401", description = "未认证"),
+            @ApiResponse(responseCode = "403", description = "无 ADMIN 权限"),
+            @ApiResponse(responseCode = "404", description = "图书不存在"),
+            @ApiResponse(responseCode = "409", description = "库存调整超出允许范围")
+    })
+    @PatchMapping("/{id}/stock")
+    @RequireRole(Role.ADMIN)
+    public Result<Void> adjustStock(@PathVariable @Positive(message = "图书ID必须为正数") Integer id,
+                                    @RequestBody @Valid StockAdjustmentDTO dto) {
+        bookService.adjustStock(id, dto);
         return Result.success();
     }
 

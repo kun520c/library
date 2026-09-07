@@ -6,8 +6,10 @@ import com.library.exception.BusinessException;
 import com.library.mapper.BookMapper;
 import com.library.mapper.BorrowRecordMapper;
 import com.library.mapper.CategoryMapper;
-import com.library.model.dto.BookDTO;
+import com.library.model.dto.BookCreateDTO;
 import com.library.model.dto.BookPageDTO;
+import com.library.model.dto.BookUpdateDTO;
+import com.library.model.dto.StockAdjustmentDTO;
 import com.library.model.entity.Book;
 import com.library.model.entity.Category;
 import com.library.model.vo.BookVO;
@@ -128,7 +130,7 @@ class BookServiceImplTest {
     void addingDuplicateIsbnReturnsConflict() {
         when(bookMapper.existsByIsbn("978-7-111")).thenReturn(true);
 
-        assertConflict(() -> service.add(bookDto()));
+        assertConflict(() -> service.add(bookCreateDto()));
         verify(bookMapper, never()).insert(any());
     }
 
@@ -136,7 +138,7 @@ class BookServiceImplTest {
     void addingBookWithMissingCategoryReturnsBadRequest() {
         when(categoryMapper.selectByIdForUpdate(2)).thenReturn(null);
 
-        assertThatThrownBy(() -> service.add(bookDto()))
+        assertThatThrownBy(() -> service.add(bookCreateDto()))
                 .isInstanceOfSatisfying(BusinessException.class,
                         exception -> assertThat(exception.getStatus()).isEqualTo(HttpStatus.BAD_REQUEST));
         verify(bookMapper, never()).insert(any());
@@ -150,7 +152,7 @@ class BookServiceImplTest {
             inserted.setId(1);
             return 1;
         }).when(bookMapper).insert(any(Book.class));
-        service.add(bookDto());
+        service.add(bookCreateDto());
 
         verify(cacheInvalidator).evictAfterCommit(1);
     }
@@ -159,8 +161,8 @@ class BookServiceImplTest {
     void updatingMissingBookReturnsNotFound() {
         when(bookMapper.selectById(1)).thenReturn(null);
 
-        assertNotFound(() -> service.update(1, bookDto()));
-        verify(bookMapper, never()).update(any());
+        assertNotFound(() -> service.update(1, bookUpdateDto()));
+        verify(bookMapper, never()).updateBasicInfo(any());
     }
 
     @Test
@@ -168,8 +170,8 @@ class BookServiceImplTest {
         when(bookMapper.selectById(1)).thenReturn(book());
         when(bookMapper.existsByIsbnAndIdNot("978-7-111", 1)).thenReturn(true);
 
-        assertConflict(() -> service.update(1, bookDto()));
-        verify(bookMapper, never()).update(any());
+        assertConflict(() -> service.update(1, bookUpdateDto()));
+        verify(bookMapper, never()).updateBasicInfo(any());
     }
 
     @Test
@@ -194,10 +196,54 @@ class BookServiceImplTest {
     void updateInvalidatesIdCache() {
         when(bookMapper.selectById(1)).thenReturn(book());
         when(bookMapper.existsByIsbnAndIdNot("978-7-111", 1)).thenReturn(false);
-        when(bookMapper.update(any())).thenReturn(1);
-        service.update(1, bookDto());
+        when(bookMapper.updateBasicInfo(any())).thenReturn(1);
+        service.update(1, bookUpdateDto());
 
         verify(cacheInvalidator).evictAfterCommit(1);
+    }
+
+    @Test
+    void updateBasicInfoNeverPassesAnAbsoluteStockValue() {
+        when(bookMapper.selectById(1)).thenReturn(book());
+        when(bookMapper.existsByIsbnAndIdNot("978-7-111", 1)).thenReturn(false);
+        when(bookMapper.updateBasicInfo(any())).thenReturn(1);
+
+        service.update(1, bookUpdateDto());
+
+        verify(bookMapper).updateBasicInfo(org.mockito.ArgumentMatchers.argThat(updated -> updated.getStock() == null));
+    }
+
+    @Test
+    void adjustsStockByDeltaAndInvalidatesCache() {
+        when(bookMapper.adjustStock(1, 5)).thenReturn(1);
+
+        service.adjustStock(1, new StockAdjustmentDTO(5));
+
+        verify(cacheInvalidator).evictAfterCommit(1);
+    }
+
+    @Test
+    void rejectsAdjustmentThatWouldMakeStockNegative() {
+        when(bookMapper.adjustStock(1, -6)).thenReturn(0);
+        when(bookMapper.selectById(1)).thenReturn(book());
+
+        assertConflict(() -> service.adjustStock(1, new StockAdjustmentDTO(-6)));
+    }
+
+    @Test
+    void adjustingMissingBookReturnsNotFound() {
+        when(bookMapper.adjustStock(1, 2)).thenReturn(0);
+        when(bookMapper.selectById(1)).thenReturn(null);
+
+        assertNotFound(() -> service.adjustStock(1, new StockAdjustmentDTO(2)));
+    }
+
+    @Test
+    void zeroStockAdjustmentReturnsBadRequest() {
+        assertThatThrownBy(() -> service.adjustStock(1, new StockAdjustmentDTO(0)))
+                .isInstanceOfSatisfying(BusinessException.class,
+                        exception -> assertThat(exception.getStatus()).isEqualTo(HttpStatus.BAD_REQUEST));
+        verify(bookMapper, never()).adjustStock(any(), any());
     }
 
     @Test
@@ -276,7 +322,11 @@ class BookServiceImplTest {
                 .build();
     }
 
-    private BookDTO bookDto() {
-        return new BookDTO("Spring", "Author", "978-7-111", new BigDecimal("59.90"), 5, 2);
+    private BookCreateDTO bookCreateDto() {
+        return new BookCreateDTO("Spring", "Author", "978-7-111", new BigDecimal("59.90"), 5, 2);
+    }
+
+    private BookUpdateDTO bookUpdateDto() {
+        return new BookUpdateDTO("Spring", "Author", "978-7-111", new BigDecimal("59.90"), 2);
     }
 }

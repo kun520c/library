@@ -6,8 +6,10 @@ import com.library.exception.BusinessException;
 import com.library.mapper.BookMapper;
 import com.library.mapper.BorrowRecordMapper;
 import com.library.mapper.CategoryMapper;
-import com.library.model.dto.BookDTO;
+import com.library.model.dto.BookCreateDTO;
 import com.library.model.dto.BookPageDTO;
+import com.library.model.dto.BookUpdateDTO;
+import com.library.model.dto.StockAdjustmentDTO;
 import com.library.model.entity.Book;
 import com.library.model.vo.BookVO;
 import com.library.model.vo.PageVO;
@@ -68,7 +70,7 @@ public class BookServiceImpl implements BookService {
 
     @Override
     @Transactional
-    public void add(BookDTO dto) {
+    public void add(BookCreateDTO dto) {
         validateCategory(dto.getCategoryId());
         if (bookMapper.existsByIsbn(dto.getIsbn())) {
             throw new BusinessException(HttpStatus.CONFLICT, "ISBN已存在");
@@ -84,7 +86,7 @@ public class BookServiceImpl implements BookService {
 
     @Override
     @Transactional
-    public void update(Integer id, BookDTO dto) {
+    public void update(Integer id, BookUpdateDTO dto) {
         if (bookMapper.selectById(id) == null) {
             throw notFound();
         }
@@ -94,8 +96,23 @@ public class BookServiceImpl implements BookService {
         }
         Book book = toEntity(dto);
         book.setId(id);
-        if (bookMapper.update(book) == 0) {
+        if (bookMapper.updateBasicInfo(book) == 0) {
             throw notFound();
+        }
+        cacheInvalidator.evictAfterCommit(id);
+    }
+
+    @Override
+    @Transactional
+    public void adjustStock(Integer id, StockAdjustmentDTO dto) {
+        if (dto.delta() == 0) {
+            throw new BusinessException(HttpStatus.BAD_REQUEST, "库存调整量不能为0");
+        }
+        if (bookMapper.adjustStock(id, dto.delta()) != 1) {
+            if (bookMapper.selectById(id) == null) {
+                throw notFound();
+            }
+            throw new BusinessException(HttpStatus.CONFLICT, "库存调整超出允许范围");
         }
         cacheInvalidator.evictAfterCommit(id);
     }
@@ -179,13 +196,23 @@ public class BookServiceImpl implements BookService {
                 .build();
     }
 
-    private Book toEntity(BookDTO dto) {
+    private Book toEntity(BookCreateDTO dto) {
         return Book.builder()
                 .title(dto.getTitle())
                 .author(dto.getAuthor())
                 .isbn(dto.getIsbn())
                 .price(dto.getPrice())
                 .stock(dto.getStock())
+                .categoryId(dto.getCategoryId())
+                .build();
+    }
+
+    private Book toEntity(BookUpdateDTO dto) {
+        return Book.builder()
+                .title(dto.getTitle())
+                .author(dto.getAuthor())
+                .isbn(dto.getIsbn())
+                .price(dto.getPrice())
                 .categoryId(dto.getCategoryId())
                 .build();
     }

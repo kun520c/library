@@ -1,23 +1,19 @@
 package com.library.model.dto;
 
-import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Digits;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
-import jakarta.validation.constraints.PositiveOrZero;
 import jakarta.validation.constraints.Size;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.math.BigDecimal;
 
-/**
- * 图书新增/编辑 DTO
- */
 @Data
 @NoArgsConstructor
-public class BookDTO {
+public class BookUpdateDTO {
     @NotBlank(message = "书名不能为空")
     @Size(max = 200, message = "书名长度不能超过200个字符")
     private String title;
@@ -35,31 +31,30 @@ public class BookDTO {
     @Digits(integer = 10, fraction = 2, message = "价格最多10位整数和2位小数")
     private BigDecimal price;
 
-    @NotNull(message = "库存不能为空")
-    @PositiveOrZero(message = "库存不能小于0")
-    private Integer stock;
-
     @Positive(message = "分类ID必须为正数")
     private Integer categoryId;
 
-    public BookDTO(String title, String author, String isbn, BigDecimal price, Integer stock, Integer categoryId) {
+    public BookUpdateDTO(String title, String author, String isbn, BigDecimal price, Integer categoryId) {
         setTitle(title);
         setAuthor(author);
         setIsbn(isbn);
         this.price = price;
-        this.stock = stock;
         this.categoryId = categoryId;
     }
 
     public void setTitle(String title) {
-        this.title = title == null ? null : title.trim();
+        this.title = normalize(title);
     }
 
     public void setAuthor(String author) {
-        this.author = author == null ? null : author.trim();
+        this.author = normalize(author);
     }
 
     public void setIsbn(String isbn) {
-        this.isbn = isbn == null ? null : isbn.trim();
+        this.isbn = normalize(isbn);
+    }
+
+    private String normalize(String value) {
+        return value == null ? null : value.trim();
     }
 }

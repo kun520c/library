@@ -29,6 +29,7 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -38,6 +39,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.options;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -50,6 +52,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class ApiSecurityWebTest {
     private static final String VALID_BOOK_JSON = """
             {"title":"Spring","author":"Author","isbn":"978-7-111","price":59.90,"stock":5,"categoryId":2}
+            """;
+    private static final String VALID_BOOK_UPDATE_JSON = """
+            {"title":"Spring","author":"Author","isbn":"978-7-111","price":59.90,"categoryId":2}
             """;
 
     @Autowired
@@ -244,6 +249,18 @@ class ApiSecurityWebTest {
     }
 
     @Test
+    void corsPreflightAllowsStockPatch() throws Exception {
+        mockMvc.perform(options("/book/1/stock")
+                        .header("Origin", "http://localhost:3000")
+                        .header("Access-Control-Request-Method", "PATCH")
+                        .header("Access-Control-Request-Headers", "Authorization,Content-Type"))
+                .andExpect(status().isOk())
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers
+                        .header().string("Access-Control-Allow-Methods",
+                                org.hamcrest.Matchers.containsString("PATCH")));
+    }
+
+    @Test
     void userCannotReadAdminBorrowEndpoint() throws Exception {
         mockMvc.perform(get("/admin/borrow").header("Authorization", "Bearer user-token"))
                 .andExpect(status().isForbidden())
@@ -268,8 +285,59 @@ class ApiSecurityWebTest {
         mockMvc.perform(put("/book/1")
                         .header("Authorization", "Bearer user-token")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(VALID_BOOK_JSON))
+                        .content(VALID_BOOK_UPDATE_JSON))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.code").value(403));
+    }
+
+    @Test
+    void adminUpdatesBasicInfoWithoutStock() throws Exception {
+        mockMvc.perform(put("/book/1")
+                        .header("Authorization", "Bearer admin-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(VALID_BOOK_UPDATE_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(200));
+        verify(bookService).update(eq(1), any());
+    }
+
+    @Test
+    void absoluteStockIsRejectedByBasicInfoUpdate() throws Exception {
+        mockMvc.perform(put("/book/1")
+                        .header("Authorization", "Bearer admin-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(VALID_BOOK_JSON))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value(400));
+        verify(bookService, never()).update(eq(1), any());
+    }
+
+    @Test
+    void onlyAdminCanAdjustStockByDelta() throws Exception {
+        mockMvc.perform(patch("/book/1/stock")
+                        .header("Authorization", "Bearer user-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"delta\":5}"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value(403));
+
+        mockMvc.perform(patch("/book/1/stock")
+                        .header("Authorization", "Bearer admin-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"delta\":5}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(200));
+        verify(bookService).adjustStock(eq(1), any());
+    }
+
+    @Test
+    void missingStockDeltaReturns400() throws Exception {
+        mockMvc.perform(patch("/book/1/stock")
+                        .header("Authorization", "Bearer admin-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value(400));
+        verify(bookService, never()).adjustStock(eq(1), any());
     }
 }

@@ -1,6 +1,9 @@
 package com.library.service;
 
 import com.library.exception.BusinessException;
+import com.library.mapper.BookMapper;
+import com.library.model.dto.StockAdjustmentDTO;
+import com.library.model.entity.Book;
 import com.library.model.entity.Role;
 import com.library.security.AuthenticatedUser;
 import com.library.security.UserContext;
@@ -32,6 +35,8 @@ class BorrowTransactionIntegrationTest {
     private BorrowService borrowService;
     @Autowired
     private BookService bookService;
+    @Autowired
+    private BookMapper bookMapper;
     @Autowired
     private JdbcTemplate jdbcTemplate;
     @MockitoBean
@@ -151,6 +156,74 @@ class BorrowTransactionIntegrationTest {
         bookService.delete(7);
 
         assertThat(jdbcTemplate.queryForObject("SELECT is_deleted FROM books WHERE id = 7", Integer.class)).isEqualTo(1);
+    }
+
+    @Test
+    void staleBasicInfoUpdateCannotRestoreBorrowedStock() {
+        Book staleEdit = Book.builder()
+                .id(7)
+                .title("Updated Java")
+                .author("Updated Author")
+                .isbn("isbn-7")
+                .price(new java.math.BigDecimal("12.00"))
+                .stock(1)
+                .build();
+        UserContext.set(new AuthenticatedUser(1, "Reader", Role.USER));
+
+        borrowService.borrow(7);
+        bookMapper.updateBasicInfo(staleEdit);
+
+        assertThat(jdbcTemplate.queryForObject("SELECT stock FROM books WHERE id = 7", Integer.class)).isZero();
+        assertThat(jdbcTemplate.queryForObject("SELECT title FROM books WHERE id = 7", String.class))
+                .isEqualTo("Updated Java");
+    }
+
+    @Test
+    void concurrentAdminAdjustmentAndBorrowComposeAsDeltas() throws Exception {
+        CountDownLatch start = new CountDownLatch(1);
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        try {
+            Future<Boolean> borrow = executor.submit(() -> {
+                UserContext.set(new AuthenticatedUser(1, "Reader", Role.USER));
+                try {
+                    start.await();
+                    borrowService.borrow(7);
+                    return true;
+                } finally {
+                    UserContext.clear();
+                }
+            });
+            Future<Boolean> adjustment = executor.submit(() -> {
+                start.await();
+                bookService.adjustStock(7, new StockAdjustmentDTO(5));
+                return true;
+            });
+            start.countDown();
+
+            assertThat(get(borrow)).isTrue();
+            assertThat(get(adjustment)).isTrue();
+            assertThat(jdbcTemplate.queryForObject("SELECT stock FROM books WHERE id = 7", Integer.class)).isEqualTo(5);
+            assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM borrow_records", Integer.class)).isEqualTo(1);
+        } finally {
+            executor.shutdownNow();
+        }
+    }
+
+    @Test
+    void stockAdjustmentHonorsBoundsWithoutChangingStockOnConflict() {
+        assertThatThrownBy(() -> bookService.adjustStock(7, new StockAdjustmentDTO(-2)))
+                .isInstanceOfSatisfying(BusinessException.class,
+                        exception -> assertThat(exception.getStatus().value()).isEqualTo(409));
+        assertThat(jdbcTemplate.queryForObject("SELECT stock FROM books WHERE id = 7", Integer.class)).isEqualTo(1);
+
+        bookService.adjustStock(7, new StockAdjustmentDTO(-1));
+        assertThat(jdbcTemplate.queryForObject("SELECT stock FROM books WHERE id = 7", Integer.class)).isZero();
+        bookService.adjustStock(7, new StockAdjustmentDTO(Integer.MAX_VALUE));
+        assertThatThrownBy(() -> bookService.adjustStock(7, new StockAdjustmentDTO(1)))
+                .isInstanceOfSatisfying(BusinessException.class,
+                        exception -> assertThat(exception.getStatus().value()).isEqualTo(409));
+        assertThat(jdbcTemplate.queryForObject("SELECT stock FROM books WHERE id = 7", Integer.class))
+                .isEqualTo(Integer.MAX_VALUE);
     }
 
     private boolean get(Future<Boolean> future) throws Exception {

@@ -32,10 +32,10 @@ public interface BookMapper {
     @Options(useGeneratedKeys = true, keyProperty = "id")
     int insert(Book book);
 
-    /** 更新图书 */
+    /** 只更新图书基本信息，库存由原子增减接口维护 */
     @Update("UPDATE books SET title = #{title}, author = #{author}, isbn = #{isbn}, price = #{price}, " +
-            "stock = #{stock}, category_id = #{categoryId} WHERE id = #{id} AND is_deleted = 0")
-    int update(Book book);
+            "category_id = #{categoryId} WHERE id = #{id} AND is_deleted = 0")
+    int updateBasicInfo(Book book);
 
     /** 逻辑删除图书 */
     @Update("UPDATE books SET is_deleted = 1 WHERE id = #{id} AND is_deleted = 0")
@@ -55,6 +55,12 @@ public interface BookMapper {
 
     @Update("UPDATE books SET stock = stock + 1 WHERE id = #{id}")
     int incrementStock(@Param("id") Integer id);
+
+    // DECIMAL 避免 MySQL UNSIGNED 在下界检查前发生负数溢出，也避免整数加法溢出。
+    @Update("UPDATE books SET stock = CAST(stock AS DECIMAL(20, 0)) + #{delta} " +
+            "WHERE id = #{id} AND is_deleted = 0 " +
+            "AND CAST(stock AS DECIMAL(20, 0)) + #{delta} BETWEEN 0 AND 2147483647")
+    int adjustStock(@Param("id") Integer id, @Param("delta") Integer delta);
 
     /** 动态条件查询图书（分页） */
     List<Book> selectByCondition(@Param("title") String title,

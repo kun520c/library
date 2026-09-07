@@ -28,7 +28,7 @@
 - 用户注册：账号唯一，密码 BCrypt 哈希，固定创建 `USER`。
 - 用户登录：账号密码校验，签发包含 `userId`、`username`、`role` 的 JWT。
 - 当前用户：安全返回用户基本信息，不返回密码。
-- 图书管理：分页筛选、详情、新增、更新、逻辑删除、活动 ISBN 唯一；存在未归还记录时拒绝删除。
+- 图书管理：分页筛选、详情、新增、基本信息更新、原子库存调整、逻辑删除、活动 ISBN 唯一；存在未归还记录时拒绝删除。
 - 分类管理：一级分类 CRUD、活动名称唯一、在用分类禁止删除。
 - 借书：30 天借期，条件 UPDATE 原子扣库存，事务内创建借阅记录。
 - 还书：所有权校验，条件 UPDATE 防重复归还，事务内恢复库存。
@@ -44,7 +44,7 @@
 | 查询图书、分类 | - | 允许 | 允许 |
 | 查看 `/user/me` | - | 允许 | 允许 |
 | 借书、归还自己的记录、查看自己的借阅记录 | - | 允许 | 允许 |
-| 新增、修改、删除图书 | - | - | 允许 |
+| 新增、修改、调整库存、删除图书 | - | - | 允许 |
 | 新增、修改、删除分类 | - | - | 允许 |
 | 查询全部借阅记录、代用户还书 | - | - | 允许 |
 
@@ -105,6 +105,26 @@ sql/                         全新建库和升级脚本
 
 条件 UPDATE 由数据库串行修改同一库存行；并发请求不能让库存变成负数。若记录插入失败，事务会回滚之前的库存扣减。
 
+### 图书信息与库存维护
+
+新增图书时可以设置初始库存。`PUT /book/{id}` 只修改书名、作者、ISBN、价格和分类，不接收也不覆盖库存；管理员通过 `PATCH /book/{id}/stock` 传递正负增量：
+
+```json
+{"delta": 5}
+```
+
+库存调整执行数据库条件更新：
+
+```sql
+UPDATE books
+SET stock = CAST(stock AS DECIMAL(20, 0)) + ?
+WHERE id = ?
+  AND is_deleted = 0
+  AND CAST(stock AS DECIMAL(20, 0)) + ? BETWEEN 0 AND 2147483647;
+```
+
+因此管理员库存调整、借书扣减和还书增加都会在数据库中原子叠加，不会因管理员提交旧编辑表单而覆盖并发借还书产生的库存变化。调整后超出允许范围返回 HTTP 409，增量为 0 返回 HTTP 400。
+
 ### 还书
 
 1. 查询借阅记录；USER 只能操作自己的记录，ADMIN 可代处理。
@@ -122,7 +142,7 @@ sql/                         全新建库和升级脚本
 - 正常详情默认缓存 10 分钟。
 - 不存在的 ID 使用空值标记缓存 1 分钟，降低缓存穿透。
 - Redis 读、写、删失败时记录 warn，查询继续访问 MySQL。
-- 图书更新、删除、借书和还书只在数据库事务提交成功后删除详情缓存。
+- 图书更新、库存调整、删除、借书和还书只在数据库事务提交成功后删除详情缓存。
 - 分页条件组合多且失效范围大，因此不缓存；原来的无调用 `book:list` 路径已删除。
 
 这是简单的 **Cache Aside + 最终一致性**，不是强一致缓存。事务提交与缓存删除之间、或 Redis 删除失败后的 TTL 窗口内可能短暂读到旧值；项目通过提交后删除、短 TTL 和数据库兜底收敛，没有引入分布式锁或消息队列。
@@ -215,7 +235,8 @@ Compose 首次创建 MySQL Volume 时自动执行 `sql/schema.sql`。已有 Volu
 | GET | `/book` | USER/ADMIN | 图书分页筛选 |
 | GET | `/book/{id}` | USER/ADMIN | 图书详情 |
 | POST | `/book` | ADMIN | 新增图书 |
-| PUT | `/book/{id}` | ADMIN | 更新图书 |
+| PUT | `/book/{id}` | ADMIN | 更新基本信息，不接受 `stock` |
+| PATCH | `/book/{id}/stock` | ADMIN | 使用 `delta` 原子增减库存 |
 | DELETE | `/book/{id}` | ADMIN | 逻辑删除图书；存在未归还记录时返回 409 |
 | GET | `/category` | USER/ADMIN | 分类列表 |
 | GET | `/category/{id}` | USER/ADMIN | 分类详情 |
@@ -227,7 +248,7 @@ Compose 首次创建 MySQL Volume 时自动执行 `sql/schema.sql`。已有 Volu
 | GET | `/borrow/my` | USER/ADMIN | 我的借阅记录 |
 | GET | `/admin/borrow` | ADMIN | 全部借阅记录 |
 
-图书分页参数为 `title`、`author`、`isbn`、`categoryId`、`page`、`size`；ISBN 精确匹配，书名和作者模糊匹配。借阅分页支持 `status`、`bookTitle`、`page`、`size`。页码从 1 开始，单页最多 100 条。
+图书分页参数为 `title`、`author`、`isbn`、`categoryId`、`page`、`size`；ISBN 精确匹配，书名和作者模糊匹配。新增图书 DTO 包含初始 `stock`，基本信息更新 DTO 不包含 `stock`，库存调整请求只包含 `delta`。借阅分页支持 `status`、`bookTitle`、`page`、`size`。页码从 1 开始，单页最多 100 条。
 
 统一返回结构：
 
@@ -263,7 +284,7 @@ local profile 默认开放：
 .\mvnw.cmd -B clean verify
 ```
 
-Linux/macOS 将 `.\mvnw.cmd` 替换为 `./mvnw`。测试不依赖外部 MySQL 或 Redis：大部分逻辑使用 Mockito，事务回滚与并发库存使用测试作用域内的 H2。覆盖注册/登录/BCrypt、JWT、Bearer 边界、角色权限、OPTIONS/CORS、DTO 校验、ISBN 冲突、图书缓存降级、分类约束、借书/还书、重复与并发归还、越权归还、借阅中禁止删书、事务回滚，以及库存为 1 时的数据库级并发不超卖。
+Linux/macOS 将 `.\mvnw.cmd` 替换为 `./mvnw`。测试不依赖外部 MySQL 或 Redis：大部分逻辑使用 Mockito，事务回滚与并发库存使用测试作用域内的 H2。覆盖注册/登录/BCrypt、JWT、Bearer 边界、角色权限、OPTIONS/CORS、DTO 校验、ISBN 冲突、图书缓存降级、分类约束、借书/还书、重复与并发归还、越权归还、借阅中禁止删书、事务回滚、库存为 1 时的数据库级并发不超卖，以及管理员库存调整与借书并发时的净增量一致性。
 
 ## 当前范围
 
