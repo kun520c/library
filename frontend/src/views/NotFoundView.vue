@@ -1,0 +1,1 @@
+<template><main class="not-found"><div><strong>404</strong><h1>这页不在目录里</h1><p>地址可能已经失效，回到书库继续浏览。</p><el-button type="primary" @click="$router.replace('/library')">返回书库</el-button></div></main></template>

@@ -1,6 +1,6 @@
 # 图书管理系统
 
-这是一个面向本科 Java 后端学习与项目讲解的 Spring Boot REST API。系统形成了“注册/登录 → JWT 身份认证 → USER/ADMIN 权限 → 图书与分类管理 → 借书原子扣库存 → 还书恢复库存 → 借阅历史查询”的完整业务闭环。
+这是一个面向本科 Java 后端学习与项目讲解的完整图书管理系统。Spring Boot REST API 与 Vue Web Client 共同形成“注册/登录 → JWT 身份认证 → USER/ADMIN 权限 → 图书与分类管理 → 借书原子扣库存 → 还书恢复库存 → 借阅历史查询”的完整业务闭环。
 
 项目保持单体、分层、易理解，不包含微服务、消息队列、搜索引擎或复杂 RBAC。
 
@@ -20,6 +20,9 @@
 | Knife4j / springdoc | API 文档 |
 | H2 | 仅用于事务和并发集成测试 |
 | Maven Wrapper | 构建与测试 |
+| Vue / Vite / TypeScript | `frontend/` 中的浏览器客户端 |
+| Pinia / Vue Router / Axios | 前端身份、路由与统一 API 访问 |
+| Element Plus | 表格、表单、弹窗等基础交互组件 |
 
 权限认证没有引入完整 Spring Security。项目使用一个 MVC 拦截器解析 Bearer Token，以 `UserContext` 保存当前请求的用户，并通过 `@RequireRole` 做 ADMIN 检查；请求结束后一定清理 ThreadLocal。
 
@@ -74,8 +77,11 @@ src/main/resources/
 ├── mapper/                  动态分页 SQL
 └── application-*.yaml       公共、生产和本地示例配置
 src/test/                    单元、Web、JWT、事务和并发测试
+frontend/                    Vue 3 + TypeScript Web Client
 sql/                         全新建库和升级脚本
 ```
+
+前端的安装、环境变量、页面权限与联调说明见 [`frontend/README.md`](frontend/README.md)。
 
 ## 核心业务流程
 
@@ -193,6 +199,16 @@ JWT 密钥为空或不足 32 字节会在启动时给出明确错误。生产 pr
 
 环境要求：JDK 21、Git；依赖可使用 Docker Desktop / Docker Compose，也可自行安装 MySQL 8 和 Redis。
 
+完整演示还需要 Node.js 24+。后端启动成功后，在另一个终端执行：
+
+```powershell
+cd frontend
+npm ci
+npm run dev
+```
+
+浏览器访问 <http://localhost:5173>。开发服务器把 `/api` 代理到 `http://localhost:8080`。
+
 ### 使用 Docker Compose
 
 PowerShell：
@@ -290,10 +306,15 @@ local profile 默认开放：
 .\mvnw.cmd -version
 .\mvnw.cmd -B test
 .\mvnw.cmd -B clean verify
+cd frontend
+npm ci
+npm run type-check
+npm run lint
+npm run build
 ```
 
 Linux/macOS 将 `.\mvnw.cmd` 替换为 `./mvnw`。测试不依赖外部 MySQL 或 Redis：大部分逻辑使用 Mockito，事务、分页 SQL 和并发库存使用测试作用域内的 H2。覆盖注册/登录/BCrypt、JWT、Bearer 边界、角色权限、OPTIONS/CORS、DTO 校验、管理员用户分页与筛选、用户名修改、借阅详情所有权与动态逾期、ISBN 冲突、图书缓存降级、分类约束、借书/还书、重复与并发归还、越权归还、借阅中禁止删书、事务回滚、库存为 1 时的数据库级并发不超卖，以及管理员库存调整与借书并发时的净增量一致性。
 
 ## 当前范围
 
-本项目没有支付、罚款、预约、续借、复杂 RBAC、消息队列、Elasticsearch、微服务或前端。这些能力不是当前图书管理业务闭环的必要条件。
+本项目没有支付、罚款、预约、续借、复杂 RBAC、消息队列、Elasticsearch 或微服务。这些能力不是当前图书管理业务闭环的必要条件。
