@@ -1,4 +1,4 @@
-# 求职展示专项审查记录
+# 项目质量审查与改进记录
 
 审查基线：`3a3d4103e88825ff036fb95a841fec4b8f2f11fc`（`main`），仓库 `kun520c/library`。2026-10-18 在干净工作区创建 `codex/library-portfolio-polish`，保留业务与分层结构。没有改写历史、修改真实业务数据或覆盖私人连接配置。
 
@@ -6,7 +6,7 @@
 
 | 级别 | 发现 | 处理与证据 |
 | --- | --- | --- |
-| P0 / P1 | 本轮审查范围内未发现确定性的认证绕过、越权读写或并发超卖问题 | 对拦截器、所有权、条件 UPDATE、事务、SQL 参数绑定、DTO 与安全 VO 进行了代码审阅与现有回归；不是全面安全认证 |
+| P0 / P1 | 首轮审查范围内未发现确定性的认证绕过、越权读写或并发超卖问题 | 对拦截器、所有权、条件 UPDATE、事务、SQL 参数绑定、DTO 与安全 VO 进行了代码审阅与现有回归；不是全面安全认证 |
 | P2 | local 示例固定 CORS 列表覆盖公共环境变量 | 删除 profile 列表；新增 2 项绑定回归，已有私人副本需手动同步 |
 | P2 | schema 固定创建/切换 `library`，与 Compose 可配置库名冲突 | 改为选库后建表；隔离 MySQL 自定义 `library_portfolio` 初始化通过 |
 | P2 | 管理员把可借库存调到 Integer 上限后还书可能产生 Java 无法读取的值 | 还书 SQL 增加上界/有效状态条件；失败返回 409 并回滚状态；H2 与真实 MySQL 均验证调整容量后可正常归还 |
@@ -19,7 +19,7 @@
 
 P2 剩余边界：JWT 角色修改不即时撤销旧 Token；Cache-Aside 允许 TTL 内旧值；没有登录限流或复杂权限模型。它们已在 [设计决策](DESIGN_DECISIONS.md) 写明，没有将当前教学项目包装成生产系统。完整开发依赖审计仍非零。P3 剩余项：前端大 chunk 提示、无独立浏览器自动化 E2E。
 
-## 文件级交付
+## 首轮文件级记录
 
 | 类别 | 文件 | 目的 |
 | --- | --- | --- |
@@ -31,16 +31,22 @@ P2 剩余边界：JWT 角色修改不即时撤销旧 Token；Cache-Aside 允许 
 | 演示资源 | [seed-demo.sql](../sql/seed-demo.sql)、[Import-LocalEnv.ps1](../scripts/Import-LocalEnv.ps1)、[Test-Demo.ps1](../scripts/Test-Demo.ps1)、[5 张 JPG](images) | 可重复书目、PowerShell 启动、36 项真实 HTTP 检查、真实界面 |
 | 测试 | [LocalCorsConfigurationTest](../src/test/java/com/library/config/LocalCorsConfigurationTest.java)、[ApiSecurityWebTest](../src/test/java/com/library/controller/ApiSecurityWebTest.java)、[GlobalExceptionHandlerTest](../src/test/java/com/library/exception/GlobalExceptionHandlerTest.java)、[BorrowTransactionIntegrationTest](../src/test/java/com/library/service/BorrowTransactionIntegrationTest.java) | 新增 6 项 JUnit 回归，不删除已有测试 |
 
-## 验证证据与限制
+## 首轮验证证据与限制
 
-最终 Maven 110/110，0 失败、0 错误、0 跳过；前端 npm ci、类型检查、Lint、Build 通过。真实 MySQL/Redis HTTP 36/36、seed 重复执行与自定义库名初始化通过，5 张图来自真实 Vue 前端；4 张 Mermaid 使用本地渲染器实际渲染。详细命令、环境与未验证内容见 [TESTING](TESTING.md)。
+提交 `5ec5ae4` 的本地验证：Maven 110/110，0 失败、0 错误、0 跳过；前端 npm ci、类型检查、Lint、Build 通过。真实 MySQL/Redis HTTP 36/36、seed 重复执行与自定义库名初始化通过，5 张图来自真实 Vue 前端；4 张 Mermaid 使用本地渲染器实际渲染。详细命令、环境与未验证内容见 [TESTING](TESTING.md)。
 
-已读取基线远程 CI：[2026-09-08 success](https://github.com/kun520c/library/actions/runs/34191017247)，对应基线 SHA；该结果不代表本轮新提交已通过远程 CI，功能分支以 PR 的最新检查为准。没有性能、用户规模、生产运行或真实旧库迁移验证。
+基线远程 CI：[2026-09-08 success](https://github.com/kun520c/library/actions/runs/34191017247)，对应基线 SHA；首轮提交 `5ec5ae4` 的 [PR CI 已通过](https://github.com/kun520c/library/actions/runs/39100457462)。这些都是历史记录，后续变更以对应提交的最新检查为准。没有性能、用户规模、生产运行或真实旧库迁移验证。
 
 远程 About Description：基于 Spring Boot 3 与 Vue 3 的图书管理系统，包含 JWT 权限认证、MySQL 事务、并发库存控制和 Redis 缓存。
 
 Topics：`java`、`spring-boot`、`mybatis`、`mysql`、`redis`、`vue3`、`typescript`、`library-management`。仓库名称与可见性保持原样。
 
-## 面试官视角
+## 工程能力与已知边界
 
-首页可以快速辨认业务闭环与技术入口，代码组织保留单体分层，亮点能定位到条件 SQL、事务和权限代码。演示手册、seed 与本地 HTTP 脚本能支撑复现，截图有真实数据来源。现有质量适合展示本科生的后端工程实践，但不能据此宣称生产级安全、强一致缓存或高并发性能；开发依赖告警、Token 生命周期和前端自动化仍是可以继续讨论的局限。
+项目使用单体分层实现借阅业务，库存条件更新、事务、缓存失效和权限校验均有源码入口与对应验证。演示数据和本地 HTTP 脚本用于复现关键流程；测试不构成生产安全、强一致缓存或并发性能保证。开发依赖审计、Token 生命周期、浏览器自动化、生产部署和旧库迁移仍有明确边界，详见设计决策与测试记录。
+
+## 收尾改进记录
+
+在 `5ec5ae4` 基础上完成小范围维护：README 介绍与本记录改为工程表述；保留全部问题分级和已知限制，并把首轮证据与新一轮验收分开。重拍书库和借阅记录截图，实测桌面宽度下无需布局修复，其他三张图片保持原样。
+
+Smoke 脚本新增显式隔离确认、配置一致性、容器身份/端口/库名预检，默认在未确认时退出，HTTP 禁用代理与重定向。运行中后端的实际连接目标仍不能由脚本自动证明，该 P2 操作风险以显式确认和受控启动约束，不能作为自动隔离保证。四种拒绝路径与 36 项业务断言均已执行，完整本轮记录见 [TESTING](TESTING.md#收尾本地验收2026-10-18asiashanghai)。没有新增业务功能，也没有修改原有数据库或私人配置。

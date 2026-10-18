@@ -84,14 +84,14 @@ UPDATE users SET role = 'ADMIN' WHERE account = 'demo-admin' AND role = 'USER';
 完成隔离启动后，在仓库根目录执行：
 
 ```powershell
-./scripts/Test-Demo.ps1 -BaseUrl http://localhost:8080 -EnvFile .env.portfolio -ComposeProject library-portfolio
+./scripts/Test-Demo.ps1 -BaseUrl http://localhost:8080 -EnvFile .env.portfolio -ComposeProject library-portfolio -ConfirmIsolatedEnvironment
 ```
 
-脚本只允许 localhost 与名为 `library_portfolio` / `library_demo` 的演示库，仍需自行确保后端连接与 Compose 指向同一新库。每次创建随机账号、一个分类和图书，只提升本轮创建的管理员，不修改已有记录。演示数据保留供检查，重复运行会增加独立数据。覆盖 36 项断言：真实 HTTP 注册登录、角色、图书维护、缓存失效、10 请求争抢 1 本、2 请求并发归还、重复归还、所有权、借阅中删除限制与归还库存上界。它不是前端 E2E 或吞吐量测试。
+只有核对当前后端的启动配置确实来自同一隔离环境文件后，才传入 `-ConfirmIsolatedEnvironment`。不传该开关时，脚本会在读取配置和发送 HTTP 前退出。预检要求 localhost、专用 Compose 项目/库名、JDBC 与 MySQL 配置一致，并通过容器项目标签、实际映射端口和 `SELECT DATABASE()` 核对 Compose 目标。**这些检查仍不能自动证明正在运行的后端连接了该库**；该连接由操作者明确确认。无法确认时不要运行，先停止并以演示配置重新启动后端。HTTP Client 禁用代理和重定向，避免本地测试请求被转发到其他地址。每次创建随机账号、一个分类和图书，只提升本轮创建的管理员，不修改已有记录。演示数据保留供检查，重复运行会增加独立数据。覆盖 36 项断言：真实 HTTP 注册登录、角色、图书维护、缓存失效、10 请求争抢 1 本、2 请求并发归还、重复归还、所有权、借阅中删除限制与归还库存上界。它不是前端 E2E 或吞吐量测试。
 
 ## 截图复现
 
-实际截图保存在 [images](images)：[登录](images/login.jpg)、[书库](images/library.jpg)、[详情](images/book-detail.jpg)、[管理概览](images/admin.jpg)、[借阅记录](images/borrows.jpg)。书库截图选择 `[演示] 后端工程` 分类；借阅记录先借后还；管理概览为演示库实时查询，数量会随操作变化。截图不展示密码、Token、个人资料或真实业务数据。
+实际截图保存在 [images](images)：[登录](images/login.jpg)、[书库](images/library.jpg)、[详情](images/book-detail.jpg)、[管理概览](images/admin.jpg)、[借阅记录](images/borrows.jpg)。书库与借阅记录截图使用 1440×900 桌面视口，本轮在新隔离库重拍；书库选择 `[演示] 后端工程` 分类，借阅记录包含借出中与已归还状态。登录、详情、管理概览保留首轮实际截图并复核对应页面；管理概览为演示库实时查询，数量会随操作变化。截图不展示密码、Token、个人资料或真实业务数据。
 
 ## 停止本轮依赖
 

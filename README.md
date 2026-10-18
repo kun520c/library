@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/kun520c/library/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/kun520c/library/actions/workflows/ci.yml)
 
-面向 Java 后端学习与求职展示的图书管理项目。Spring Boot REST API 与 Vue 3 前端实现注册登录、图书与分类管理、借书扣库存、还书恢复库存、借阅记录查询的业务闭环。采用单体分层架构，重点实践权限隔离、数据库事务、并发库存和 Redis 缓存。
+基于 Spring Boot 3 与 Vue 3 实现的前后端分离图书管理系统，支持注册登录、图书与分类管理、借阅归还和记录查询。围绕借阅业务实践数据库事务、权限与数据所有权校验、并发库存更新及 Redis 缓存，保持单体分层结构。
 
 ![实际运行的普通用户书库](docs/images/library.jpg)
 
@@ -85,7 +85,7 @@ npm run dev -- --strictPort
 | [测试](docs/TESTING.md) | 测试边界、命令、真实环境验证记录 |
 | [API](docs/API.md) | 接口权限与请求参数 |
 | [配置与数据库](docs/CONFIGURATION.md) | 环境变量、非 Docker 启动、旧库迁移 |
-| [本轮审查与交付](docs/REVIEW.md) | 分级问题、变更与剩余限制 |
+| [质量审查](docs/REVIEW.md) | 分级问题、改进记录与已知边界 |
 | [前端](frontend/README.md) | 页面、部署代理、客户端约定 |
 
 ## 构建与验证状态
@@ -99,7 +99,7 @@ npm run lint
 npm run build
 ```
 
-CI [工作流](.github/workflows/ci.yml) 在 main push 和 PR 中执行 Maven verify、前端类型检查、Lint 和构建。本轮本地验证：**110 项后端测试通过**，前端检查通过；另在隔离 MySQL 8.4 / Redis 7.4 中完成真实 HTTP 并发与权限 Smoke Test。执行环境、脚本、结果和未覆盖项见 [TESTING](docs/TESTING.md)。H2 测试不能替代 MySQL 验证，徽章显示的是 main 的远程状态。
+CI [工作流](.github/workflows/ci.yml) 在 main push 和 PR 中执行 Maven verify、前端类型检查、Lint 和构建。后端有 **110 项测试**；隔离 MySQL / Redis 的 36 项 HTTP Smoke 与浏览器操作由本地单独执行，不属于当前 CI。各次执行的版本、环境、结果和未覆盖项见 [TESTING](docs/TESTING.md)。H2 测试不能替代 MySQL 验证，徽章显示的是 main 的远程状态。
 
 ## 当前范围
 

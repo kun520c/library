@@ -35,9 +35,9 @@ Linux 使用 `./mvnw`。后端自动测试不需要外部 MySQL/Redis，test pro
 
 H2 使用 `MODE=MySQL` 和独立 [schema-test.sql](../src/test/resources/schema-test.sql)，并不执行完整 MySQL DDL。MySQL 的 UNSIGNED、ENUM、utf8mb4 排序规则、生成列、优化器、InnoDB 行锁与默认隔离级别都不能由 H2 完整模拟。H2 测试通过不等于 MySQL 生产兼容性、吞吐量或死锁行为已通过验证。
 
-真实环境最小回归脚本是 [Test-Demo.ps1](../scripts/Test-Demo.ps1)，步骤见 [DEMO](DEMO.md)。它使用现有 HttpClient 与 PowerShell，没有为一次演示引入浏览器测试框架。浏览器端本轮实际操作验证，尚未建立独立自动化 E2E；后续若持续维护前端，再基于关键流程引入固定数据与浏览器 CI。
+真实环境最小回归脚本是 [Test-Demo.ps1](../scripts/Test-Demo.ps1)，步骤见 [DEMO](DEMO.md)。它使用现有 HttpClient 与 PowerShell，没有为一次演示引入浏览器测试框架。浏览器端采用实际操作验证，尚未建立独立自动化 E2E；后续若持续维护前端，再基于关键流程引入固定数据与浏览器 CI。
 
-## 本次实际记录（2026-10-18，Asia/Shanghai）
+## 首轮记录：5ec5ae4（2026-10-18，Asia/Shanghai）
 
 环境：Windows、JDK 21.0.11、Maven Wrapper 3.9.15、Node 24.15.0、npm 11.12.1。独立 Compose 项目 `library-portfolio`，MySQL 8.4.11、Redis 7.4.11，数据库 `library_portfolio`，使用全新独立数据卷和随机本地凭据。没有连接工作区原有数据库。
 
@@ -52,7 +52,7 @@ H2 使用 `MODE=MySQL` 和独立 [schema-test.sql](../src/test/resources/schema-
 | 浏览器 | 运行真实前后端验证注册、登录、筛选、详情、借阅和归还、USER 页面守卫与 ADMIN 管理概览、图书管理页面；5 张实际截图 |
 | npm 依赖审计 | 兼容更新 brace-expansion、shell-quote、source-map-js 后，生产依赖 0 项；完整审计仍有 4 项 high（同一 braces → micromatch → fast-glob → Vue ESLint 配置开发链），未做破坏性降级 |
 
-本轮新增 6 项 JUnit 测试（CORS 2 项、UTF-8 Web 边界 2 项、日志脱敏 1 项、归还库存上界与事务回滚 1 项），没有删除原测试。脚本每次生成不同演示账号，日志仅输出断言标签与状态，不输出凭据。初次测试的沙箱 JVM 附加与 npm 目录权限问题在正常本地权限下解决；未把受阻尝试计为通过。
+首轮新增 6 项 JUnit 测试（CORS 2 项、UTF-8 Web 边界 2 项、日志脱敏 1 项、归还库存上界与事务回滚 1 项），没有删除原测试。脚本每次生成不同演示账号，日志仅输出断言标签与状态，不输出凭据。初次测试的沙箱 JVM 附加与 npm 目录权限问题在正常本地权限下解决；未把受阻尝试计为通过。
 
 ## 未覆盖项
 
@@ -62,3 +62,25 @@ H2 使用 `MODE=MySQL` 和独立 [schema-test.sql](../src/test/resources/schema-
 - 完整开发依赖审计非零，属于构建/检查工具链风险；没有把 `npm audit` 非零写成通过。
 
 剩余问题与优先级见 [审查记录](REVIEW.md)。
+
+## 收尾本地验收（2026-10-18，Asia/Shanghai）
+
+本次以 `5ec5ae4` 为基线，重新执行以下检查；不沿用上一节的通过结论。只修改截图、文档和 Smoke 脚本预检，后端业务实现与前端页面代码保持不变。
+
+环境：JDK 21.0.11、Maven 3.9.15、Node 24.15.0、npm 11.12.1。新建 Compose 项目 `library-demo-final`、数据库 `library_demo_final` 和独立数据卷；MySQL / Redis 的宿主端口分别为 13308 / 16380。导入 seed 后初始 0 个账号、8 本书；后端以显式 JDBC 参数连接该库，未加载私人 local profile。
+
+| 检查 | 本轮实际结果 |
+| --- | --- |
+| Maven `-B clean verify` | 110 总数、110 通过、0 失败、0 错误、0 跳过，BUILD SUCCESS |
+| 前端 `npm ci`、type-check、lint、build | 全部通过；仍有大 chunk 提示 |
+| Compose | 配置检查、MySQL / Redis 健康检查通过 |
+| HTTP Smoke | 更新后的脚本 36/36 通过，含并发借还、越权拒绝、缓存失效、库存上限及归还回滚 |
+| 失败关闭预检 | 缺少显式确认、JDBC 库名错配、普通 Compose 项目、容器映射端口错配 4 个反例，均在 HTTP 写入前拒绝 |
+| 文档 | 9 个 Markdown 文件共 106 个本地链接、图片路径与锚点通过；4 张 Mermaid 在防翻译临时页实际渲染，脚本与文档 PowerShell 命令语法通过 |
+| 依赖审计 | 本轮生产依赖审计 0 项；完整安装仍报告开发链 4 项 high，未做破坏性依赖调整 |
+| 浏览器操作 | 注册登录、分类筛选、详情、借书库存 5→4、归还恢复 5、USER 管理路由守卫、重新登录后 ADMIN 管理概览均实测 |
+| 截图与布局 | 重拍书库和借阅记录；1440×900 视口下表格 scrollWidth / clientWidth 均为 1096px，无被裁切单元格，三本分类书卡完整显示；未修改 UI 布局代码 |
+
+Smoke 脚本的预检不等于后端连接证明：`-ConfirmIsolatedEnvironment` 表示操作者已确认当前后端与目标隔离环境相同，脚本本身无法查询运行中后端的 JDBC 目标。不能确认时应停止测试。预检还核对 Compose 项目标签、实际映射端口与选中库名，并禁用 HTTP 代理及重定向，详见 [DEMO](DEMO.md)。
+
+截图来源区分：书库、借阅列表是本轮重拍；登录、图书详情、管理概览沿用首轮图片，其对应页面在本轮实际联调中复核。未新增自动化浏览器 E2E、生产部署、压测或真实旧库迁移验证。PR 与 main 的远程状态请查看对应提交的 [Actions](https://github.com/kun520c/library/actions)；本地 MySQL / Redis 检查没有加入 CI。

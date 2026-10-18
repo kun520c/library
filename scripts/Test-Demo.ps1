@@ -1,10 +1,14 @@
 param(
     [string]$BaseUrl = 'http://localhost:8080',
     [string]$EnvFile = '.env.portfolio',
-    [string]$ComposeProject = 'library-portfolio'
+    [string]$ComposeProject = 'library-portfolio',
+    [switch]$ConfirmIsolatedEnvironment
 )
 
 $ErrorActionPreference = 'Stop'
+if (!$ConfirmIsolatedEnvironment) {
+    throw 'No requests were sent. First confirm the running backend was started with this isolated EnvFile, then pass -ConfirmIsolatedEnvironment. Its actual connection cannot be discovered by this script.'
+}
 . "$PSScriptRoot/Import-LocalEnv.ps1" -Path $EnvFile
 if ($env:MYSQL_DATABASE -notmatch '^library_(portfolio|demo)(_[a-z0-9]+)?$') {
     throw 'Use a dedicated library_portfolio or library_demo database, never existing business data.'
@@ -12,8 +16,39 @@ if ($env:MYSQL_DATABASE -notmatch '^library_(portfolio|demo)(_[a-z0-9]+)?$') {
 if ($BaseUrl -notmatch '^http://(localhost|127\.0\.0\.1):[0-9]+$') {
     throw 'This smoke test is restricted to an explicitly started local backend.'
 }
+if ($ComposeProject -notmatch '^library-(portfolio|demo)(-[a-z0-9]+)?$') {
+    throw 'Use a dedicated library-portfolio or library-demo Compose project.'
+}
+$expectedTarget = [regex]::Escape("$($env:MYSQL_PORT)/$($env:MYSQL_DATABASE)")
+if ($env:MYSQL_PORT -notmatch '^[0-9]{1,5}$' -or
+    $env:DB_URL -notmatch "^jdbc:mysql://(localhost|127\.0\.0\.1):$expectedTarget(\?|$)" -or
+    $env:DB_USERNAME -ne $env:MYSQL_USER -or
+    [string]::IsNullOrWhiteSpace($env:MYSQL_PASSWORD) -or $env:DB_PASSWORD -ne $env:MYSQL_PASSWORD) {
+    throw 'EnvFile must explicitly align DB_URL, DB_USERNAME and DB_PASSWORD with the isolated MySQL settings. No HTTP requests were sent.'
+}
+$mysqlId = docker compose --env-file $EnvFile -p $ComposeProject ps -q mysql
+if ($LASTEXITCODE -ne 0 -or @($mysqlId).Count -ne 1 -or !$mysqlId) {
+    throw 'Expected one running isolated Compose MySQL container. No HTTP requests were sent.'
+}
+$actualProject = docker inspect --format '{{ index .Config.Labels "com.docker.compose.project" }}' $mysqlId
+if ($LASTEXITCODE -ne 0 -or $actualProject -ne $ComposeProject) {
+    throw 'Compose container identity mismatch. No HTTP requests were sent.'
+}
+$mysqlBindings = docker port $mysqlId 3306/tcp
+$portPattern = ':' + [regex]::Escape($env:MYSQL_PORT) + '$'
+if ($LASTEXITCODE -ne 0 -or !($mysqlBindings | Where-Object { $_ -match $portPattern })) {
+    throw 'Compose MySQL port does not match EnvFile. No HTTP requests were sent.'
+}
+$actualDatabase = docker compose --env-file $EnvFile -p $ComposeProject exec -T mysql sh -c 'MYSQL_PWD="$MYSQL_PASSWORD" exec mysql --batch --skip-column-names -u"$MYSQL_USER" "$MYSQL_DATABASE" -e "SELECT DATABASE();"'
+if ($LASTEXITCODE -ne 0 -or $actualDatabase -ne $env:MYSQL_DATABASE) {
+    throw 'Isolated database preflight failed. No HTTP requests were sent.'
+}
+Write-Output "Preflight: Compose database $actualDatabase verified; running backend target is operator-confirmed, not automatically verified."
 Add-Type -AssemblyName System.Net.Http
-$http = [System.Net.Http.HttpClient]::new()
+$handler = [System.Net.Http.HttpClientHandler]::new()
+$handler.AllowAutoRedirect = $false
+$handler.UseProxy = $false
+$http = [System.Net.Http.HttpClient]::new($handler)
 $http.Timeout = [TimeSpan]::FromSeconds(15)
 $checks = 0
 function Assert-Equal($Actual, $Expected, [string]$Label) {
