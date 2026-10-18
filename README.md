@@ -12,8 +12,14 @@
 | 登录 | 图书详情 |
 | --- | --- |
 | ![登录](docs/images/login.jpg) | ![图书详情](docs/images/book-detail.jpg) |
-| 管理概览 | 我的借阅 |
-| ![管理概览](docs/images/admin.jpg) | ![我的借阅](docs/images/borrows.jpg) |
+
+**管理概览**
+
+![管理概览](docs/images/admin.jpg)
+
+**借阅记录**
+
+![我的借阅](docs/images/borrows.jpg)
 
 截图来自本地运行的 Vue + Spring Boot + MySQL + Redis；书目为虚构演示数据，书封由现有 CSS 组件生成。复现见 [演示手册](docs/DEMO.md)。
 
