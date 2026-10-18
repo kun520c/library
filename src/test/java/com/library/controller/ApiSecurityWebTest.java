@@ -91,6 +91,29 @@ class ApiSecurityWebTest {
     }
 
     @Test
+    void multibytePasswordsOverBcryptLimitAreRejectedBeforeServiceInvocation() throws Exception {
+        String password = "密".repeat(25); // 75 UTF-8 bytes, but only 25 Java characters.
+        for (String endpoint : List.of("/user/register", "/user/login")) {
+            String body = endpoint.endsWith("register")
+                    ? "{\"account\":\"reader\",\"username\":\"Reader\",\"password\":\"" + password + "\"}"
+                    : "{\"account\":\"reader\",\"password\":\"" + password + "\"}";
+            mockMvc.perform(post(endpoint).contentType(MediaType.APPLICATION_JSON).content(body))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.code").value(400));
+        }
+        verify(userService, never()).register(any());
+        verify(userService, never()).login(any());
+    }
+
+    @Test
+    void multibytePasswordAtBcryptLimitIsAccepted() throws Exception {
+        mockMvc.perform(post("/user/register").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"account\":\"reader\",\"username\":\"Reader\",\"password\":\"" + "密".repeat(24) + "\"}"))
+                .andExpect(status().isOk());
+        verify(userService).register(any());
+    }
+
+    @Test
     void unauthenticatedProtectedRequestReturnsReal401() throws Exception {
         mockMvc.perform(get("/book"))
                 .andExpect(status().isUnauthorized())

@@ -47,7 +47,8 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(HttpMessageNotReadableException.class)
     public ResponseEntity<Result<Void>> handleUnreadable(HttpMessageNotReadableException exception) {
-        log.warn("请求体解析失败: {}", exception.getMessage());
+        // Parser messages may include request values; never log credentials from a malformed body.
+        log.warn("请求体解析失败，异常类型={}", exception.getClass().getSimpleName());
         return error(HttpStatus.BAD_REQUEST, "请求参数格式错误，请检查JSON格式");
     }
 

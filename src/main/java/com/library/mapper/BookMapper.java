@@ -53,7 +53,7 @@ public interface BookMapper {
     @Update("UPDATE books SET stock = stock - 1 WHERE id = #{id} AND stock > 0 AND is_deleted = 0")
     int decrementStockIfAvailable(@Param("id") Integer id);
 
-    @Update("UPDATE books SET stock = stock + 1 WHERE id = #{id}")
+    @Update("UPDATE books SET stock = stock + 1 WHERE id = #{id} AND is_deleted = 0 AND stock < 2147483647")
     int incrementStock(@Param("id") Integer id);
 
     // DECIMAL 避免 MySQL UNSIGNED 在下界检查前发生负数溢出，也避免整数加法溢出。

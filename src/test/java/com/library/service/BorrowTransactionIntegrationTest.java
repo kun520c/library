@@ -231,6 +231,28 @@ class BorrowTransactionIntegrationTest {
     }
 
     @Test
+    void returnAtStockCapacityRollsBackStatusUntilAdminMakesRoom() {
+        UserContext.set(new AuthenticatedUser(1, "Reader", Role.USER));
+        var record = borrowService.borrow(7);
+        bookService.adjustStock(7, new StockAdjustmentDTO(Integer.MAX_VALUE));
+
+        assertThatThrownBy(() -> borrowService.returnBook(record.getRecordId()))
+                .isInstanceOfSatisfying(BusinessException.class,
+                        exception -> assertThat(exception.getStatus().value()).isEqualTo(409));
+        assertThat(jdbcTemplate.queryForObject("SELECT stock FROM books WHERE id = 7", Integer.class))
+                .isEqualTo(Integer.MAX_VALUE);
+        assertThat(jdbcTemplate.queryForObject("SELECT status FROM borrow_records WHERE id = ?", String.class,
+                record.getRecordId())).isEqualTo("BORROWED");
+
+        bookService.adjustStock(7, new StockAdjustmentDTO(-1));
+        borrowService.returnBook(record.getRecordId());
+        assertThat(jdbcTemplate.queryForObject("SELECT stock FROM books WHERE id = 7", Integer.class))
+                .isEqualTo(Integer.MAX_VALUE);
+        assertThat(jdbcTemplate.queryForObject("SELECT status FROM borrow_records WHERE id = ?", String.class,
+                record.getRecordId())).isEqualTo("RETURNED");
+    }
+
+    @Test
     void stockAdjustmentHonorsBoundsWithoutChangingStockOnConflict() {
         assertThatThrownBy(() -> bookService.adjustStock(7, new StockAdjustmentDTO(-2)))
                 .isInstanceOfSatisfying(BusinessException.class,

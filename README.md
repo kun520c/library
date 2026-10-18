@@ -1,310 +1,102 @@
-# 图书管理系统
+# 一方书室 · 图书管理系统
 
-这是一个面向本科 Java 后端学习与项目讲解的完整图书管理系统。Spring Boot REST API 与 Vue Web Client 共同形成“注册/登录 → JWT 身份认证 → USER/ADMIN 权限 → 图书与分类管理 → 借书原子扣库存 → 还书恢复库存 → 借阅历史查询”的完整业务闭环。
+[![CI](https://github.com/kun520c/library/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/kun520c/library/actions/workflows/ci.yml)
 
-项目保持单体、分层、易理解，不包含微服务、消息队列、搜索引擎或复杂 RBAC。
+基于 Spring Boot 3 与 Vue 3 实现的前后端分离图书管理系统，支持注册登录、图书与分类管理、借阅归还和记录查询。围绕借阅业务实践数据库事务、权限与数据所有权校验、并发库存更新及 Redis 缓存，保持单体分层结构。
+
+![实际运行的普通用户书库](docs/images/library.jpg)
+
+<details>
+<summary>查看更多真实界面：登录 / 图书详情 / 管理概览 / 借阅记录</summary>
+
+| 登录 | 图书详情 |
+| --- | --- |
+| ![登录](docs/images/login.jpg) | ![图书详情](docs/images/book-detail.jpg) |
+
+**管理概览**
+
+![管理概览](docs/images/admin.jpg)
+
+**借阅记录**
+
+![我的借阅](docs/images/borrows.jpg)
+
+截图来自本地运行的 Vue + Spring Boot + MySQL + Redis；书目为虚构演示数据，书封由现有 CSS 组件生成。复现见 [演示手册](docs/DEMO.md)。
+
+</details>
 
 ## 技术栈
 
-| 组件 | 版本/用途 |
-| --- | --- |
-| Java | 21 |
-| Spring Boot | 3.5.16 |
-| Spring MVC | REST API、参数校验、拦截器 |
-| MyBatis | 3.0.5，数据库访问 |
-| MySQL | 8.x；Docker Compose 使用 8.4 |
-| Redis | 图书详情 Cache-Aside 缓存 |
-| JJWT | 0.12.6，HS256 JWT |
-| BCrypt | Spring Security Crypto，仅用于密码哈希 |
-| Jakarta Validation | DTO、分页和路径参数校验 |
-| Knife4j / springdoc | API 文档 |
-| H2 | 仅用于事务和并发集成测试 |
-| Maven Wrapper | 构建与测试 |
-| Vue / Vite / TypeScript | `frontend/` 中的浏览器客户端 |
-| Pinia / Vue Router / Axios | 前端身份、路由与统一 API 访问 |
-| Element Plus | 表格、表单、弹窗等基础交互组件 |
-
-权限认证没有引入完整 Spring Security。项目使用一个 MVC 拦截器解析 Bearer Token，以 `UserContext` 保存当前请求的用户，并通过 `@RequireRole` 做 ADMIN 检查；请求结束后一定清理 ThreadLocal。
-
-## 功能清单
-
-- 用户注册：账号唯一，密码 BCrypt 哈希，固定创建 `USER`。
-- 用户登录：账号密码校验，签发包含 `userId`、`username`、`role` 的 JWT。
-- 当前用户：安全返回用户基本信息，并允许只修改自己的用户名，不返回密码。
-- 管理员用户查询：按用户名、账号筛选并稳定分页，不查询或返回密码。
-- 图书管理：分页筛选、详情、新增、基本信息更新、原子库存调整、逻辑删除、活动 ISBN 唯一；存在未归还记录时拒绝删除。
-- 分类管理：一级分类 CRUD、活动名称唯一、在用分类禁止删除。
-- 借书：30 天借期，条件 UPDATE 原子扣库存，事务内创建借阅记录。
-- 还书：所有权校验，条件 UPDATE 防重复归还，事务内恢复库存。
-- 借阅记录：用户查询自己的列表和详情，管理员查询全部列表及任意详情；列表支持状态和书名筛选。
-- Redis 降级：缓存异常只记录日志，图书详情查询仍回源 MySQL。
-- 统一响应：`Result<T>` 与 `PageVO<T>`，错误 HTTP Status 和响应 `code` 一致。
-
-## 权限说明
-
-| 能力 | 游客 | USER | ADMIN |
-| --- | --- | --- | --- |
-| 注册、登录 | 允许 | 允许 | 允许 |
-| 查询图书、分类 | - | 允许 | 允许 |
-| 查看 `/user/me` | - | 允许 | 允许 |
-| 修改自己的用户名 | - | 允许 | 允许 |
-| 借书、归还自己的记录、查看自己的借阅记录 | - | 允许 | 允许 |
-| 新增、修改、调整库存、删除图书 | - | - | 允许 |
-| 新增、修改、删除分类 | - | - | 允许 |
-| 查询全部借阅记录、任意借阅详情、代用户还书 | - | - | 允许 |
-| 分页查询用户 | - | - | 允许 |
-
-普通注册接口的 DTO 不包含 `role`，并启用了未知 JSON 字段拒绝策略，因此不能通过注册请求创建 ADMIN。管理员由维护者在数据库中设置：
-
-```sql
-UPDATE users SET role = 'ADMIN' WHERE account = 'admin-account';
-```
-
-## 项目结构
-
-```text
-src/main/java/com/library/
-├── common/                  泛型统一响应
-├── config/                  Web、密码、时间、OpenAPI 和配置属性
-├── controller/              用户、图书、分类、借阅接口
-├── exception/               业务异常与全局异常响应
-├── interceptor/             Bearer JWT 身份和角色拦截器
-├── mapper/                  MyBatis Mapper
-├── model/{dto,entity,vo}/   入参、数据库实体、出参
-├── security/                JWT、当前用户上下文、角色注解
-└── service/                 业务接口、实现与缓存失效协作
-src/main/resources/
-├── mapper/                  动态分页 SQL
-└── application-*.yaml       公共、生产和本地示例配置
-src/test/                    单元、Web、JWT、事务和并发测试
-frontend/                    Vue 3 + TypeScript Web Client
-sql/                         全新建库和升级脚本
-```
-
-前端的安装、环境变量、页面权限与联调说明见 [`frontend/README.md`](frontend/README.md)。
-
-## 核心业务流程
-
-### JWT 登录
-
-1. 注册时使用 BCrypt 保存密码哈希，角色固定为 `USER`。
-2. 登录成功后签发 HS256 JWT，默认有效期 12 小时。
-3. 受保护接口必须传递 `Authorization: Bearer <JWT>`。
-4. 拦截器验证签名与过期时间，将身份写入 `UserContext`。
-5. `@RequireRole(ADMIN)` 接口在进入 Controller 前完成权限校验。
-6. 请求完成后调用 `ThreadLocal.remove()`，避免线程池复用造成身份泄漏。
-
-缺失、格式错误、空、非法或过期 Token 返回 HTTP 401；身份有效但权限不足返回 HTTP 403。
-
-`PUT /user/me` 修改用户名后，数据库中的用户资料及后续 `/user/me` 查询会立即返回新用户名。已经签发的 JWT 不会主动刷新，其中的 `username` claim 在 Token 过期前可能仍是旧值；需要最新用户名的业务查询以数据库为准，本项目没有实现 Token 撤销、Refresh Token 或 Session。
-
-### 借书
-
-1. 从 `UserContext` 取得当前用户。
-2. 查询有效图书。
-3. 执行原子 SQL：
-
-   ```sql
-   UPDATE books
-   SET stock = stock - 1
-   WHERE id = ? AND stock > 0 AND is_deleted = 0;
-   ```
-
-4. 受影响行数不是 1 时按库存不足处理。
-5. 在同一事务中写入 `BORROWED` 借阅记录，`due_time = borrow_time + 30 天`。
-6. 数据库提交成功后删除对应图书详情缓存。
-
-条件 UPDATE 由数据库串行修改同一库存行；并发请求不能让库存变成负数。若记录插入失败，事务会回滚之前的库存扣减。
-
-### 图书信息与库存维护
-
-新增图书时可以设置初始库存。`PUT /book/{id}` 只修改书名、作者、ISBN、价格和分类，不接收也不覆盖库存；管理员通过 `PATCH /book/{id}/stock` 传递正负增量：
-
-```json
-{"delta": 5}
-```
-
-库存调整执行数据库条件更新：
-
-```sql
-UPDATE books
-SET stock = CAST(stock AS DECIMAL(20, 0)) + ?
-WHERE id = ?
-  AND is_deleted = 0
-  AND CAST(stock AS DECIMAL(20, 0)) + ? BETWEEN 0 AND 2147483647;
-```
-
-因此管理员库存调整、借书扣减和还书增加都会在数据库中原子叠加，不会因管理员提交旧编辑表单而覆盖并发借还书产生的库存变化。调整后超出允许范围返回 HTTP 409，增量为 0 返回 HTTP 400。
-
-### 还书
-
-1. 查询借阅记录；USER 只能操作自己的记录，ADMIN 可代处理。
-2. 执行 `WHERE status = 'BORROWED'` 的条件 UPDATE，只有一个并发请求能把记录改为 `RETURNED`。
-3. 更新成功后库存 `stock = stock + 1`。
-4. 状态更新和库存恢复在同一事务中；任一步失败都会整体回滚。
-5. 提交成功后删除图书详情缓存。
-
-`OVERDUE` 不持久化。它由“当前时间晚于 `due_time` 且状态仍为 `BORROWED`”动态计算，避免每天批量同步一个容易过期的冗余状态。
-
-## Redis 缓存策略
-
-只缓存 `GET /book/{id}`，不缓存任意组合的分页搜索：
-
-- 正常详情默认缓存 10 分钟。
-- 不存在的 ID 使用空值标记缓存 1 分钟，降低缓存穿透。
-- Redis 读、写、删失败时记录 warn，查询继续访问 MySQL。
-- 图书更新、库存调整、删除、借书和还书只在数据库事务提交成功后删除详情缓存。
-- 分页条件组合多且失效范围大，因此不缓存；原来的无调用 `book:list` 路径已删除。
-
-这是简单的 **Cache Aside + 最终一致性**，不是强一致缓存。事务提交与缓存删除之间、或 Redis 删除失败后的 TTL 窗口内可能短暂读到旧值；项目通过提交后删除、短 TTL 和数据库兜底收敛，没有引入分布式锁或消息队列。
-
-## 数据库初始化与升级
-
-- 全新数据库：执行 [`sql/schema.sql`](sql/schema.sql)。
-- 从原始 `User` / `Book` 表迁移：备份并人工审核后执行 [`sql/migration-from-legacy.sql`](sql/migration-from-legacy.sql)。
-
-仓库没有发布过可验证的“已具备 `users` / `books`、角色和活动 ISBN，但缺少分类借阅闭环”的数据库基线，因此不保留仅服务开发中间状态的 `upgrade_v2.sql`。迁移脚本不会由应用自动执行，也不会删除现有数据；它会为旧 `category_id` 创建“迁移分类-ID”占位分类，启动后可通过分类接口改名。
-
-主要约束和索引：
-
-- `users.account` 唯一。
-- `books.active_isbn` 是生成列：有效图书等于 ISBN，逻辑删除图书为 NULL；唯一索引允许删除后重新录入同 ISBN。
-- `categories.active_name` 用相同方式保证有效分类名称唯一。
-- `books.category_id`、`borrow_records.user_id`、`book_id`、`status/due_time` 建立业务查询索引。
-- 借阅表通过外键关联用户和图书，并约束借期及归还状态/时间的一致性。
-
-## 配置与敏感信息
-
-仓库不提交真实密码和 JWT 密钥。默认 profile 是 `local`，但真实的 `application-local.yaml` 已加入 `.gitignore`；首次使用需从示例复制。
-
-| 环境变量 | 必需/默认 | 说明 |
+| 技术 | 使用位置 | 主要作用 |
 | --- | --- | --- |
-| `DB_URL` | prod 必需 | MySQL JDBC URL |
-| `DB_USERNAME` | prod 必需 | 数据库用户 |
-| `DB_PASSWORD` | prod 必需 | 数据库密码 |
-| `REDIS_HOST` | prod 必需 | Redis 主机 |
-| `REDIS_PORT` | prod 必需 | Redis 端口 |
-| `REDIS_PASSWORD` | prod 必需 | Redis 密码 |
-| `REDIS_CONNECT_TIMEOUT` | `2s` | Redis 建连超时 |
-| `REDIS_TIMEOUT` | `2s` | Redis 命令超时 |
-| `JWT_SECRET` | 必需 | UTF-8 后至少 32 字节的 HS256 密钥 |
-| `JWT_EXPIRATION` | `12h` | Token 有效期 |
-| `CORS_ALLOWED_ORIGINS` | 必需 | 逗号分隔的明确 http/https 来源，不允许 `*` |
-| `BOOK_CACHE_TTL` | `10m` | 正常图书详情 TTL |
-| `BOOK_NULL_CACHE_TTL` | `1m` | 空值标记 TTL |
+| Java 21 / Spring Boot 3.5.16 | 后端 | REST API、校验、事务管理 |
+| MyBatis 3.0.5 / MySQL 8.4 | Mapper / 数据库 | 参数绑定、条件更新、约束和索引 |
+| Redis 7.4 | 图书详情 | Cache-Aside、空值缓存、故障回源 |
+| JJWT / BCrypt | 身份与密码 | HS256 Token、密码哈希 |
+| Vue 3 / TypeScript | `frontend/` | 用户与管理员页面 |
+| Pinia / Vue Router / Axios / Element Plus | 前端 | 身份状态、路由、API 和交互组件 |
+| JUnit / Mockito / H2 / GitHub Actions | 测试与 CI | 单元、Web、安全与事务回归 |
 
-JWT 密钥为空或不足 32 字节会在启动时给出明确错误。生产 profile 默认关闭 Knife4j、Swagger UI 和 OpenAPI JSON；MyBatis 不输出 SQL 到标准输出，本地仅将 Mapper 日志级别设为 debug。
+## 值得查看的实现
 
-## 本地启动
+- **并发借书**：[条件 UPDATE](src/main/java/com/library/mapper/BookMapper.java) 仅在库存大于 0 时扣减；[借阅事务](src/main/java/com/library/service/impl/BorrowServiceImpl.java) 将扣库存与创建记录绑定，插入失败整体回滚。管理员使用 `delta` 调库存，避免旧表单覆盖并发变更。
+- **防重复归还**：[状态条件更新](src/main/java/com/library/mapper/BorrowRecordMapper.java) 只有一个请求能从 `BORROWED` 改为 `RETURNED`，同一事务只恢复一次库存；重复请求返回 409。这是业务状态防重，没有实现通用幂等键。
+- **详情缓存**：[Cache-Aside 与空值缓存](src/main/java/com/library/service/impl/BookServiceImpl.java)、[提交后失效](src/main/java/com/library/service/BookCacheInvalidator.java)，Redis 异常回源。并发旧值回填、删除失败等仍可能造成 TTL 窗口内的不一致，详见 [设计决策](docs/DESIGN_DECISIONS.md)。
+- **认证与权限**：[JWT](src/main/java/com/library/security/JwtService.java) + [MVC 拦截器](src/main/java/com/library/interceptor/AuthenticationInterceptor.java) + USER/ADMIN 角色；[Service](src/main/java/com/library/service/impl/BorrowServiceImpl.java) 校验借阅所有权，ThreadLocal 在请求结束清理。注册固定创建 USER，密码使用 BCrypt。
 
-环境要求：JDK 21、Git；依赖可使用 Docker Desktop / Docker Compose，也可自行安装 MySQL 8 和 Redis。
+## 快速开始（Windows PowerShell）
 
-完整演示还需要 Node.js 24+。后端启动成功后，在另一个终端执行：
+要求 JDK 21、Node.js 24 / npm 11、Git、已启动的 Docker Desktop（Linux containers）。Maven Wrapper 要求 Maven 3.9+，首次运行自动下载。
+
+在仓库根目录执行；已有 `.env` 或私人配置时先核对连接目标，以下命令保留已有文件：
+
+```powershell
+if (!(Test-Path .env)) { Copy-Item .env.example .env }
+if (!(Test-Path src/main/resources/application-local.yaml)) {
+    Copy-Item src/main/resources/application-local.example.yaml src/main/resources/application-local.yaml
+}
+# 为新示例配置生成本地随机密钥；不会替换自己已经设置的值。
+$envText = Get-Content .env -Raw
+$localSecret = [guid]::NewGuid().ToString('N') + [guid]::NewGuid().ToString('N')
+$envText.Replace('replace-with-at-least-32-byte-local-secret', $localSecret) |
+    Set-Content .env -Encoding utf8
+. ./scripts/Import-LocalEnv.ps1
+docker compose config --quiet
+docker compose up -d --wait
+$OutputEncoding = [Text.UTF8Encoding]::new($false)
+Get-Content -Raw -Encoding utf8 sql/seed-demo.sql |
+    docker compose exec -T mysql sh -c 'MYSQL_PWD="$MYSQL_PASSWORD" exec mysql --default-character-set=utf8mb4 -u"$MYSQL_USER" "$MYSQL_DATABASE"'
+.\mvnw.cmd spring-boot:run
+```
+
+Compose 在**全新数据卷**中自动把 [`sql/schema.sql`](sql/schema.sql) 导入 `MYSQL_DATABASE`；已有卷不会重新初始化，不要用删除卷的方式升级真实数据。若修改库名、用户名或端口，需要同步 `.env` 中的 `DB_URL`、`DB_USERNAME`、`DB_PASSWORD`。旧版私人 local 配置若含固定 CORS 列表，应移除该列表，让公共配置读取 `CORS_ALLOWED_ORIGINS`。
+
+上述 seed 脚本可重复执行，不创建账号、不重置库存。另开 PowerShell，在仓库根目录启动前端：
 
 ```powershell
 cd frontend
 npm ci
-npm run dev
+npm run dev -- --strictPort
 ```
 
-浏览器访问 <http://localhost:5173>。开发服务器把 `/api` 代理到 `http://localhost:8080`。
+访问 <http://localhost:5173>，点击“注册读者账号”，自行设置演示账号和密码；登录后即可借还书。管理员由维护者在**本地数据库**授予角色并重新登录，具体步骤见 [DEMO](docs/DEMO.md)。后端为 <http://localhost:8080>，local API 文档为 <http://localhost:8080/doc.html>；Vite 将 `/api` 代理到 8080。
 
-### 使用 Docker Compose
+## 文档导航
 
-PowerShell：
+| 文档 | 内容 |
+| --- | --- |
+| [架构](docs/ARCHITECTURE.md) | 组件、分层、表关系、JWT 与借还书流程 |
+| [设计决策](docs/DESIGN_DECISIONS.md) | 方案选择、原因与代价 |
+| [演示手册](docs/DEMO.md) | 从零启动、管理员、借还书、越权验证、截图 |
+| [测试](docs/TESTING.md) | 测试边界、命令、真实环境验证记录 |
+| [API](docs/API.md) | 接口权限与请求参数 |
+| [配置与数据库](docs/CONFIGURATION.md) | 环境变量、非 Docker 启动、旧库迁移 |
+| [质量审查](docs/REVIEW.md) | 分级问题、改进记录与已知边界 |
+| [前端](frontend/README.md) | 页面、部署代理、客户端约定 |
+
+## 构建与验证状态
 
 ```powershell
-Copy-Item .env.example .env
-Copy-Item src\main\resources\application-local.example.yaml src\main\resources\application-local.yaml
-docker compose up -d
-Get-Content .env |
-    Where-Object { $_ -and -not $_.TrimStart().StartsWith("#") -and $_.Contains("=") } |
-    ForEach-Object {
-        $parts = $_ -split "=", 2
-        Set-Item -Path "Env:$($parts[0].Trim())" -Value $parts[1]
-    }
-.\mvnw.cmd spring-boot:run
-```
-
-Bash：
-
-```bash
-cp .env.example .env
-cp src/main/resources/application-local.example.yaml src/main/resources/application-local.yaml
-docker compose up -d
-set -a && . ./.env && set +a
-./mvnw spring-boot:run
-```
-
-Compose 首次创建 MySQL Volume 时自动执行 `sql/schema.sql`。已有 Volume 不会自动重放脚本，应按版本选择升级 SQL。
-
-### 不使用 Docker
-
-1. 启动 MySQL 8 和 Redis。
-2. 在 MySQL 执行 `sql/schema.sql`。
-3. 复制 `application-local.example.yaml` 为 `application-local.yaml`。
-4. 设置数据库、Redis、JWT 和 CORS 配置。
-5. 运行 `./mvnw spring-boot:run`；Windows 使用 `.\mvnw.cmd spring-boot:run`。
-
-## API 清单
-
-| 方法 | 路径 | 权限 | 说明 |
-| --- | --- | --- | --- |
-| POST | `/user/register` | 公开 | 注册 USER |
-| POST | `/user/login` | 公开 | 登录并返回 Bearer Token |
-| GET | `/user/me` | USER/ADMIN | 当前用户信息 |
-| PUT | `/user/me` | USER/ADMIN | 只修改当前用户的 `username` |
-| GET | `/admin/users` | ADMIN | 用户分页查询，支持用户名、账号筛选 |
-| GET | `/book` | USER/ADMIN | 图书分页筛选 |
-| GET | `/book/{id}` | USER/ADMIN | 图书详情 |
-| POST | `/book` | ADMIN | 新增图书 |
-| PUT | `/book/{id}` | ADMIN | 更新基本信息，不接受 `stock` |
-| PATCH | `/book/{id}/stock` | ADMIN | 使用 `delta` 原子增减库存 |
-| DELETE | `/book/{id}` | ADMIN | 逻辑删除图书；存在未归还记录时返回 409 |
-| GET | `/category` | USER/ADMIN | 分类列表 |
-| GET | `/category/{id}` | USER/ADMIN | 分类详情 |
-| POST | `/category` | ADMIN | 新增分类 |
-| PUT | `/category/{id}` | ADMIN | 更新分类 |
-| DELETE | `/category/{id}` | ADMIN | 删除未被有效图书使用的分类 |
-| POST | `/borrow/{bookId}` | USER/ADMIN | 借书 |
-| POST | `/borrow/{recordId}/return` | USER/ADMIN | 还书；USER 仅限本人 |
-| GET | `/borrow/{recordId}` | USER/ADMIN | 借阅详情；USER 仅限本人，ADMIN 可查任意记录 |
-| GET | `/borrow/my` | USER/ADMIN | 我的借阅记录 |
-| GET | `/admin/borrow` | ADMIN | 全部借阅记录 |
-
-图书分页参数为 `title`、`author`、`isbn`、`categoryId`、`page`、`size`；ISBN 精确匹配，书名和作者模糊匹配。用户分页参数为 `username`、`account`、`page`、`size`，两种文本条件均为模糊匹配，结果按 `id DESC` 稳定排序，且查询列不包含密码。新增图书 DTO 包含初始 `stock`，基本信息更新 DTO 不包含 `stock`，库存调整请求只包含 `delta`。借阅分页支持 `status`、`bookTitle`、`page`、`size`。所有页码从 1 开始，单页最多 100 条。
-
-统一返回结构：
-
-```json
-{
-  "code": 200,
-  "message": "success",
-  "data": {}
-}
-```
-
-登录后调用示例：
-
-```bash
-curl http://localhost:8080/book \
-  -H "Authorization: Bearer eyJ..."
-```
-
-## API 文档
-
-local profile 默认开放：
-
-- Knife4j：<http://localhost:8080/doc.html>
-- OpenAPI JSON：<http://localhost:8080/v3/api-docs>
-
-在 Knife4j 的 Authorize 中填写登录响应的 `accessToken`，文档会自动加 Bearer 前缀。生产 profile 默认关闭文档端点。
-
-## 构建与测试
-
-```powershell
-.\mvnw.cmd -version
-.\mvnw.cmd -B test
 .\mvnw.cmd -B clean verify
 cd frontend
 npm ci
@@ -313,8 +105,8 @@ npm run lint
 npm run build
 ```
 
-Linux/macOS 将 `.\mvnw.cmd` 替换为 `./mvnw`。测试不依赖外部 MySQL 或 Redis：大部分逻辑使用 Mockito，事务、分页 SQL 和并发库存使用测试作用域内的 H2。覆盖注册/登录/BCrypt、JWT、Bearer 边界、角色权限、OPTIONS/CORS、DTO 校验、管理员用户分页与筛选、用户名修改、借阅详情所有权与动态逾期、ISBN 冲突、图书缓存降级、分类约束、借书/还书、重复与并发归还、越权归还、借阅中禁止删书、事务回滚、库存为 1 时的数据库级并发不超卖，以及管理员库存调整与借书并发时的净增量一致性。
+CI [工作流](.github/workflows/ci.yml) 在 main push 和 PR 中执行 Maven verify、前端类型检查、Lint 和构建。后端有 **110 项测试**；隔离 MySQL / Redis 的 36 项 HTTP Smoke 与浏览器操作由本地单独执行，不属于当前 CI。各次执行的版本、环境、结果和未覆盖项见 [TESTING](docs/TESTING.md)。H2 测试不能替代 MySQL 验证，徽章显示的是 main 的远程状态。
 
 ## 当前范围
 
-本项目没有支付、罚款、预约、续借、复杂 RBAC、消息队列、Elasticsearch 或微服务。这些能力不是当前图书管理业务闭环的必要条件。
+这是教学与工程实践项目，尚无生产运行、性能或用户规模数据。权限只有 USER/ADMIN，没有复杂 RBAC、Token 撤销、Refresh Token、预约、续借、罚款、微服务或消息队列。缓存允许短暂不一致；浏览器 Smoke 检查是人工操作，尚无持续运行的前端自动化 E2E。前端构建仍有大 chunk 提示，开发工具链仍有待上游修复的依赖审计告警，详见测试记录。

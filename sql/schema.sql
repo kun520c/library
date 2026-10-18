@@ -1,9 +1,6 @@
 -- MySQL 8 fresh-install schema for library-system.
-CREATE DATABASE IF NOT EXISTS library
-    CHARACTER SET utf8mb4
-    COLLATE utf8mb4_0900_ai_ci;
-
-USE library;
+-- Select the target database before execution (mysql --database=...).
+-- Docker's entrypoint selects MYSQL_DATABASE when running this file.
 
 CREATE TABLE IF NOT EXISTS users (
     id INT UNSIGNED NOT NULL AUTO_INCREMENT,

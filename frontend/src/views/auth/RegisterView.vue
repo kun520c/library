@@ -16,7 +16,13 @@ const rules: FormRules = {
     { min: 4, max: 32, message: '账号长度为 4–32 个字符', trigger: 'blur' },
     { pattern: /^[A-Za-z0-9._-]+$/, message: '仅支持字母、数字、点、下划线和连字符', trigger: 'blur' },
   ],
-  password: [{ required: true, message: '请输入密码', trigger: 'blur' }, { min: 6, max: 72, message: '密码长度为 6–72 个字符' }],
+  password: [
+    { required: true, message: '请输入密码', trigger: 'blur' },
+    { min: 6, max: 72, message: '密码至少 6 个字符，UTF-8 最多 72 字节' },
+    { validator: (_rule, value: string, callback) => {
+      callback(new TextEncoder().encode(value).length <= 72 ? undefined : new Error('密码的 UTF-8 长度不能超过 72 字节'))
+    }, trigger: 'blur' },
+  ],
 }
 
 async function submit() {

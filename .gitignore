@@ -34,3 +34,8 @@ build/
 
 application-local.yaml
 .env
+.env.*
+!.env.example
+*.log
+playwright-report/
+test-results/
