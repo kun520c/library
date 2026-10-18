@@ -85,7 +85,7 @@ public class BorrowServiceImpl implements BorrowService {
             throw new BusinessException(HttpStatus.CONFLICT, "该借阅记录已经归还");
         }
         if (bookMapper.incrementStock(record.getBookId()) != 1) {
-            throw new IllegalStateException("归还图书时恢复库存失败");
+            throw new BusinessException(HttpStatus.CONFLICT, "无法恢复库存，请联系管理员核对图书状态与库存上限");
         }
         cacheInvalidator.evictAfterCommit(record.getBookId());
     }

@@ -1,5 +1,6 @@
 package com.library.model.dto;
 
+import com.library.validation.Utf8Length;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
@@ -15,6 +16,7 @@ public class LoginDTO {
     private String account;
     @NotBlank(message = "密码不能为空")
     @Size(max = 72, message = "密码长度不能超过72个字符")
+    @Utf8Length(max = 72)
     private String password;
 
     public LoginDTO(String account, String password) {
