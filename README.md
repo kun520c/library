@@ -81,7 +81,7 @@ npm run dev -- --strictPort
 
 ### Linux / macOS（bash）
 
-本批不新增 bash 演示脚本；用 shell 导出 `.env` 后启动（等价于 PowerShell 的 `Import-LocalEnv.ps1`，只处理普通 `KEY=VALUE`，不执行表达式）：
+本批不新增独立 bash 脚本。用下面的 `import_local_env` 导入 `.env`（与 [`scripts/Import-LocalEnv.ps1`](scripts/Import-LocalEnv.ps1) 相同：只接受普通 `KEY=VALUE`，跳过空行和 `#` 注释，按第一个 `=` 拆分后赋值，不执行表达式，不自动去除引号）。不要 `source` 或 `.` 原始 `.env`：示例 `DB_URL` 含未加引号的 `&`，直接 source 会被 shell 执行。`JWT_SECRET` 等值里的 `&`、`$`、引号按字面保留，因此不要再给值加引号。
 
 ```bash
 cp -n .env.example .env
@@ -91,10 +91,31 @@ if grep -q 'replace-with-at-least-32-byte-local-secret' .env; then
   secret="$(openssl rand -hex 32)"
   sed -i.bak "s/replace-with-at-least-32-byte-local-secret/${secret}/" .env && rm -f .env.bak
 fi
-set -a
-# shellcheck disable=SC1091
-. ./.env
-set +a
+# 与 scripts/Import-LocalEnv.ps1 相同：只解析普通 KEY=VALUE 并赋值。
+# 不要 source 或 . 原始环境文件。
+import_local_env() {
+  local file="$1" line key val
+  [[ -n "$file" && -f "$file" ]] || { echo "Environment file not found: ${file:-}" >&2; return 1; }
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    line="${line%$'\r'}"
+    [[ "$line" == *[![:space:]]* ]] || continue
+    line="${line#"${line%%[![:space:]]*}"}"
+    line="${line%"${line##*[![:space:]]}"}"
+    [[ -z "$line" || "$line" == '#'* ]] && continue
+    if [[ "$line" != *=* ]]; then
+      echo "Expected plain KEY=VALUE entries in the local environment file." >&2
+      return 1
+    fi
+    key="${line%%=*}"
+    val="${line#*=}"
+    if [[ ! "$key" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]; then
+      echo "Expected plain KEY=VALUE entries in the local environment file." >&2
+      return 1
+    fi
+    export "$key=$val"
+  done < "$file"
+}
+import_local_env .env || exit 1
 docker compose config --quiet
 docker compose up -d --wait
 docker compose exec -T mysql sh -c 'MYSQL_PWD="$MYSQL_PASSWORD" exec mysql --default-character-set=utf8mb4 -u"$MYSQL_USER" "$MYSQL_DATABASE"' < sql/seed-demo.sql
