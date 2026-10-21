@@ -44,11 +44,13 @@
 - **详情缓存**：[Cache-Aside 与空值缓存](src/main/java/com/library/service/impl/BookServiceImpl.java)、[提交后失效](src/main/java/com/library/service/BookCacheInvalidator.java)，Redis 异常回源。并发旧值回填、删除失败等仍可能造成 TTL 窗口内的不一致，详见 [设计决策](docs/DESIGN_DECISIONS.md)。
 - **认证与权限**：[JWT](src/main/java/com/library/security/JwtService.java) + [MVC 拦截器](src/main/java/com/library/interceptor/AuthenticationInterceptor.java) + USER/ADMIN 角色；[Service](src/main/java/com/library/service/impl/BorrowServiceImpl.java) 校验借阅所有权，ThreadLocal 在请求结束清理。注册固定创建 USER，密码使用 BCrypt。
 
-## 快速开始（Windows PowerShell）
+## 快速开始
 
-要求 JDK 21、Node.js 24 / npm 11、Git、已启动的 Docker Desktop（Linux containers）。Maven Wrapper 要求 Maven 3.9+，首次运行自动下载。
+要求 JDK 21、Node.js 24 / npm 11、Git，以及可用的 Docker（Windows / macOS 上一般为 Docker Desktop 的 Linux containers；Linux 上为 Docker Engine + Compose 插件）。Maven Wrapper 要求 Maven 3.9+，首次运行自动下载。
 
-在仓库根目录执行；已有 `.env` 或私人配置时先核对连接目标，以下命令保留已有文件：
+在仓库根目录执行；已有 `.env` 或私人配置时先核对连接目标，以下命令保留已有文件。
+
+### Windows PowerShell
 
 ```powershell
 if (!(Test-Path .env)) { Copy-Item .env.example .env }
@@ -69,9 +71,7 @@ Get-Content -Raw -Encoding utf8 sql/seed-demo.sql |
 .\mvnw.cmd spring-boot:run
 ```
 
-Compose 在**全新数据卷**中自动把 [`sql/schema.sql`](sql/schema.sql) 导入 `MYSQL_DATABASE`；已有卷不会重新初始化，不要用删除卷的方式升级真实数据。若修改库名、用户名或端口，需要同步 `.env` 中的 `DB_URL`、`DB_USERNAME`、`DB_PASSWORD`。旧版私人 local 配置若含固定 CORS 列表，应移除该列表，让公共配置读取 `CORS_ALLOWED_ORIGINS`。
-
-上述 seed 脚本可重复执行，不创建账号、不重置库存。另开 PowerShell，在仓库根目录启动前端：
+另开 PowerShell 启动前端：
 
 ```powershell
 cd frontend
@@ -79,7 +79,42 @@ npm ci
 npm run dev -- --strictPort
 ```
 
-访问 <http://localhost:5173>，点击“注册读者账号”，自行设置演示账号和密码；登录后即可借还书。管理员由维护者在**本地数据库**授予角色并重新登录，具体步骤见 [DEMO](docs/DEMO.md)。后端为 <http://localhost:8080>，local API 文档为 <http://localhost:8080/doc.html>；Vite 将 `/api` 代理到 8080。
+### Linux / macOS（bash）
+
+本批不新增 bash 演示脚本；用 shell 导出 `.env` 后启动（等价于 PowerShell 的 `Import-LocalEnv.ps1`，只处理普通 `KEY=VALUE`，不执行表达式）：
+
+```bash
+cp -n .env.example .env
+cp -n src/main/resources/application-local.example.yaml src/main/resources/application-local.yaml
+# 仅为仍是占位符的密钥生成随机值；已改过的 JWT_SECRET 不会被覆盖。
+if grep -q 'replace-with-at-least-32-byte-local-secret' .env; then
+  secret="$(openssl rand -hex 32)"
+  sed -i.bak "s/replace-with-at-least-32-byte-local-secret/${secret}/" .env && rm -f .env.bak
+fi
+set -a
+# shellcheck disable=SC1091
+. ./.env
+set +a
+docker compose config --quiet
+docker compose up -d --wait
+docker compose exec -T mysql sh -c 'MYSQL_PWD="$MYSQL_PASSWORD" exec mysql --default-character-set=utf8mb4 -u"$MYSQL_USER" "$MYSQL_DATABASE"' < sql/seed-demo.sql
+chmod +x mvnw
+./mvnw spring-boot:run
+```
+
+另开终端启动前端：
+
+```bash
+cd frontend
+npm ci
+npm run dev -- --strictPort
+```
+
+macOS 若系统 `sed -i` 行为不同，可改用 `sed -i ''` 做就地替换，或手动把 `.env` 里的占位密钥改成至少 32 字节随机串。
+
+Compose 在**全新数据卷**中自动把 [`sql/schema.sql`](sql/schema.sql) 导入 `MYSQL_DATABASE`；已有卷不会重新初始化，不要用删除卷的方式升级真实数据。若修改库名、用户名或端口，需要同步 `.env` 中的 `DB_URL`、`DB_USERNAME`、`DB_PASSWORD`。旧版私人 local 配置若含固定 CORS 列表，应移除该列表，让公共配置读取 `CORS_ALLOWED_ORIGINS`。
+
+上述 seed 脚本可重复执行，不创建账号、不重置库存。访问 <http://localhost:5173>，点击“注册读者账号”，自行设置演示账号和密码；登录后即可借还书。管理员由维护者在**本地数据库**授予角色并重新登录，具体步骤见 [DEMO](docs/DEMO.md)。后端为 <http://localhost:8080>，local API 文档为 <http://localhost:8080/doc.html>；Vite 将 `/api` 代理到 8080。
 
 ## 文档导航
 
@@ -96,8 +131,21 @@ npm run dev -- --strictPort
 
 ## 构建与验证状态
 
+Windows PowerShell：
+
 ```powershell
 .\mvnw.cmd -B clean verify
+cd frontend
+npm ci
+npm run type-check
+npm run lint
+npm run build
+```
+
+Linux / macOS：
+
+```bash
+./mvnw -B clean verify
 cd frontend
 npm ci
 npm run type-check

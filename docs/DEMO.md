@@ -4,7 +4,7 @@
 
 ## 1. 初始化环境
 
-普通启动可直接使用 [README 快速开始](../README.md#快速开始windows-powershell)。复现本轮 Smoke Test 时，在根目录准备独立环境文件；已有同名文件请保留并核对：
+普通启动可直接使用 [README 快速开始](../README.md#快速开始)（含 Windows PowerShell 与 Linux/macOS bash 对照）。隔离 Smoke 下列步骤仍以 PowerShell 为例；bash 可将 `Import-LocalEnv.ps1` 换成 `set -a; . ./.env.portfolio; set +a`，并把 `.\mvnw.cmd` 换成 `./mvnw`。复现本轮 Smoke Test 时，在根目录准备独立环境文件；已有同名文件请保留并核对：
 
 ```powershell
 if (!(Test-Path .env.portfolio)) { Copy-Item .env.example .env.portfolio }

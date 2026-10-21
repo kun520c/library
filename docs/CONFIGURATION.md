@@ -1,6 +1,6 @@
 # 配置与数据库
 
-Spring Boot 不会自动读取根目录 `.env`。Compose 用它做变量替换，PowerShell 运行应用前还需执行 `. ./scripts/Import-LocalEnv.ps1`。脚本只接受示例中的普通 `KEY=VALUE`，不执行 shell 表达式或自动去除引号。
+Spring Boot 不会自动读取根目录 `.env`。Compose 用它做变量替换；运行应用前还需把其中的变量导入当前 shell。PowerShell 执行 `. ./scripts/Import-LocalEnv.ps1`；bash 可用 `set -a; . ./.env; set +a`（本批未新增独立 bash 脚本）。导入逻辑只接受示例中的普通 `KEY=VALUE`，不执行 shell 表达式或自动去除引号。
 
 | 环境变量 | 默认 / 要求 | 作用 |
 | --- | --- | --- |
@@ -38,7 +38,7 @@ SOURCE sql/schema.sql;
 SOURCE sql/seed-demo.sql;
 ```
 
-单独启动 Redis，设置 `.env` 中的连接和密码，复制 local 示例后导入环境变量，再运行 `.\mvnw.cmd spring-boot:run`。不要用 Windows PowerShell 的 `<` 进行标准输入文件重定向。
+单独启动 Redis，设置 `.env` 中的连接和密码，复制 local 示例后导入环境变量，再运行 `.\mvnw.cmd spring-boot:run`（Linux/macOS 为 `./mvnw spring-boot:run`）。不要用 Windows PowerShell 的 `<` 进行标准输入文件重定向；bash 可用 `< sql/seed-demo.sql` 这类重定向。
 
 ## 已有库与旧表迁移
 
