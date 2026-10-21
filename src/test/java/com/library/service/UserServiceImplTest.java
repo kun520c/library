@@ -98,7 +98,8 @@ class UserServiceImplTest {
     @Test
     void missingAccountAndWrongPasswordUseSameUnauthorizedMessage() {
         when(userMapper.findByAccount("none")).thenReturn(null);
-        when(userMapper.findByAccount("reader")).thenReturn(user("reader", passwordEncoder.encode("correct")));
+        when(userMapper.findByAccount("reader"))
+                .thenReturn(user("reader", passwordEncoder.encode("correct")));
 
         BusinessException missing = catchLoginException(new LoginDTO("none", "anything"));
         BusinessException wrong = catchLoginException(new LoginDTO("reader", "wrong"));

@@ -20,6 +20,8 @@ class GlobalExceptionHandlerTest {
         var response = new GlobalExceptionHandler().handleUnreadable(exception);
 
         assertThat(response.getStatusCode().value()).isEqualTo(400);
-        assertThat(output.getAll()).contains("HttpMessageNotReadableException").doesNotContain(sensitiveValue);
+        assertThat(output.getAll())
+                .contains("HttpMessageNotReadableException")
+                .doesNotContain(sensitiveValue);
     }
 }

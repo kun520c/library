@@ -38,6 +38,7 @@ public class UserServiceImpl implements UserService {
         if (userMapper.existsByAccount(dto.getAccount())) {
             throw new BusinessException(HttpStatus.CONFLICT, "账号已被注册");
         }
+
         User user = new User();
         user.setUsername(dto.getUsername());
         user.setAccount(dto.getAccount());
@@ -55,6 +56,7 @@ public class UserServiceImpl implements UserService {
         if (user == null || !passwordEncoder.matches(dto.getPassword(), user.getPassword())) {
             throw new BusinessException(HttpStatus.UNAUTHORIZED, INVALID_CREDENTIALS);
         }
+
         String token = jwtService.generateToken(user);
         return new LoginVO("Bearer", token, jwtService.expiresInSeconds());
     }
@@ -66,6 +68,7 @@ public class UserServiceImpl implements UserService {
         if (user == null) {
             throw new BusinessException(HttpStatus.NOT_FOUND, "用户不存在");
         }
+
         return toUserVO(user);
     }
 
@@ -75,6 +78,7 @@ public class UserServiceImpl implements UserService {
         if (UserContext.getRequiredUser().role() != Role.ADMIN) {
             throw new BusinessException(HttpStatus.FORBIDDEN, "权限不足");
         }
+
         long offset = ((long) dto.getPage() - 1L) * dto.getSize();
         List<AdminUserVO> users = userMapper.selectByCondition(
                 dto.getUsername(), dto.getAccount(), offset, dto.getSize());
@@ -90,9 +94,11 @@ public class UserServiceImpl implements UserService {
         if (user == null) {
             throw new BusinessException(HttpStatus.NOT_FOUND, "用户不存在");
         }
+
         if (userMapper.updateUsername(userId, dto.getUsername()) != 1) {
             throw new IllegalStateException("用户名未更新");
         }
+
         user.setUsername(dto.getUsername());
         return toUserVO(user);
     }

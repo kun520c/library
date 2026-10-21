@@ -43,7 +43,8 @@ class CategoryServiceImplTest {
 
         service.add(dto);
 
-        verify(categoryMapper).insert(org.mockito.ArgumentMatchers.argThat(category -> "Java".equals(category.getName())));
+        verify(categoryMapper).insert(org.mockito.ArgumentMatchers.argThat(
+                category -> "Java".equals(category.getName())));
     }
 
     @Test

@@ -29,7 +29,8 @@ public class BookPageDTO {
     @Max(value = 100, message = "每页条数最大为100")
     private Integer size = 10;
 
-    public BookPageDTO(String title, String author, String isbn, Integer categoryId, Integer page, Integer size) {
+    public BookPageDTO(String title, String author, String isbn, Integer categoryId,
+                       Integer page, Integer size) {
         setTitle(title);
         setAuthor(author);
         setIsbn(isbn);

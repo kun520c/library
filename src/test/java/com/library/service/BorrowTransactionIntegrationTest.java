@@ -49,7 +49,8 @@ class BorrowTransactionIntegrationTest {
         jdbcTemplate.update("DELETE FROM borrow_records");
         jdbcTemplate.update("DELETE FROM books");
         jdbcTemplate.update("DELETE FROM users");
-        jdbcTemplate.update("INSERT INTO users(id, username, account, password, role) VALUES(1, 'Reader', 'reader', 'hash', 'USER')");
+        jdbcTemplate.update(
+                "INSERT INTO users(id, username, account, password, role) VALUES(1, 'Reader', 'reader', 'hash', 'USER')");
         jdbcTemplate.update("INSERT INTO books(id, title, author, isbn, price, stock, is_deleted) " +
                 "VALUES(7, 'Java', 'Author', 'isbn-7', 10.00, 1, 0)");
     }
@@ -80,8 +81,8 @@ class BorrowTransactionIntegrationTest {
                     }
                 }));
             }
-            start.countDown();
 
+            start.countDown();
             int successCount = 0;
             for (Future<Boolean> future : futures) {
                 successCount += get(future) ? 1 : 0;
@@ -129,15 +130,16 @@ class BorrowTransactionIntegrationTest {
                     }
                 }));
             }
-            start.countDown();
 
+            start.countDown();
             int successCount = 0;
             for (Future<Boolean> future : futures) {
                 successCount += get(future) ? 1 : 0;
             }
 
             assertThat(successCount).isEqualTo(1);
-            assertThat(jdbcTemplate.queryForObject("SELECT stock FROM books WHERE id = 7", Integer.class)).isEqualTo(1);
+            assertThat(jdbcTemplate.queryForObject(
+                    "SELECT stock FROM books WHERE id = 7", Integer.class)).isEqualTo(1);
             assertThat(jdbcTemplate.queryForObject(
                     "SELECT status FROM borrow_records WHERE id = 9", String.class)).isEqualTo("RETURNED");
         } finally {
@@ -157,7 +159,8 @@ class BorrowTransactionIntegrationTest {
         borrowService.returnBook(record.getRecordId());
         bookService.delete(7);
 
-        assertThat(jdbcTemplate.queryForObject("SELECT is_deleted FROM books WHERE id = 7", Integer.class)).isEqualTo(1);
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT is_deleted FROM books WHERE id = 7", Integer.class)).isEqualTo(1);
     }
 
     @Test
@@ -219,11 +222,13 @@ class BorrowTransactionIntegrationTest {
                 bookService.adjustStock(7, new StockAdjustmentDTO(5));
                 return true;
             });
+
             start.countDown();
 
             assertThat(get(borrow)).isTrue();
             assertThat(get(adjustment)).isTrue();
-            assertThat(jdbcTemplate.queryForObject("SELECT stock FROM books WHERE id = 7", Integer.class)).isEqualTo(5);
+            assertThat(jdbcTemplate.queryForObject(
+                    "SELECT stock FROM books WHERE id = 7", Integer.class)).isEqualTo(5);
             assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM borrow_records", Integer.class)).isEqualTo(1);
         } finally {
             executor.shutdownNow();
@@ -261,6 +266,7 @@ class BorrowTransactionIntegrationTest {
 
         bookService.adjustStock(7, new StockAdjustmentDTO(-1));
         assertThat(jdbcTemplate.queryForObject("SELECT stock FROM books WHERE id = 7", Integer.class)).isZero();
+
         bookService.adjustStock(7, new StockAdjustmentDTO(Integer.MAX_VALUE));
         assertThatThrownBy(() -> bookService.adjustStock(7, new StockAdjustmentDTO(1)))
                 .isInstanceOfSatisfying(BusinessException.class,

@@ -42,6 +42,7 @@ public class CategoryServiceImpl implements CategoryService {
         if (categoryMapper.existsByName(dto.getName())) {
             throw nameConflict();
         }
+
         Category category = new Category();
         category.setName(dto.getName());
         if (categoryMapper.insert(category) != 1) {
@@ -59,6 +60,7 @@ public class CategoryServiceImpl implements CategoryService {
         if (categoryMapper.existsByNameAndIdNot(dto.getName(), id)) {
             throw nameConflict();
         }
+
         category.setName(dto.getName());
         if (categoryMapper.update(category) != 1) {
             throw notFound();
@@ -74,13 +76,16 @@ public class CategoryServiceImpl implements CategoryService {
         if (bookMapper.countActiveByCategoryId(id) > 0) {
             throw new BusinessException(HttpStatus.CONFLICT, "分类仍被有效图书使用，不能删除");
         }
+
         if (categoryMapper.deleteById(id) != 1) {
             throw notFound();
         }
     }
 
     private CategoryVO toVO(Category category) {
-        return new CategoryVO(category.getId(), category.getName(), category.getCreatedAt(), category.getUpdatedAt());
+        return new CategoryVO(
+                category.getId(), category.getName(),
+                category.getCreatedAt(), category.getUpdatedAt());
     }
 
     private BusinessException notFound() {

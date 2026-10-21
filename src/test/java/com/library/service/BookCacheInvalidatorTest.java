@@ -36,7 +36,10 @@ class BookCacheInvalidatorTest {
         invalidator.evictAfterCommit(7);
 
         verify(redisTemplate, never()).delete("test:book:7");
-        TransactionSynchronizationManager.getSynchronizations().forEach(synchronization -> synchronization.afterCommit());
+
+        TransactionSynchronizationManager.getSynchronizations()
+                .forEach(synchronization -> synchronization.afterCommit());
+
         verify(redisTemplate).delete("test:book:7");
     }
 
@@ -46,7 +49,8 @@ class BookCacheInvalidatorTest {
         org.mockito.Mockito.doThrow(new IllegalStateException("redis down"))
                 .when(redisTemplate).delete("test:book:7");
 
-        org.assertj.core.api.Assertions.assertThatCode(() -> invalidator.evict(7)).doesNotThrowAnyException();
+        org.assertj.core.api.Assertions.assertThatCode(() -> invalidator.evict(7))
+                .doesNotThrowAnyException();
     }
 
     private CacheProperties properties() {
