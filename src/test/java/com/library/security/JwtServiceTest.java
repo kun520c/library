@@ -77,7 +77,8 @@ class JwtServiceTest {
         int signatureStart = token.lastIndexOf('.') + 1;
         char original = token.charAt(signatureStart);
         char replacement = original == 'A' ? 'B' : 'A';
-        String tampered = token.substring(0, signatureStart) + replacement + token.substring(signatureStart + 1);
+        String tampered = token.substring(0, signatureStart) + replacement
+                + token.substring(signatureStart + 1);
 
         assertThatThrownBy(() -> jwtService.parseToken(tampered))
                 .isInstanceOfAny(SignatureException.class, io.jsonwebtoken.MalformedJwtException.class);

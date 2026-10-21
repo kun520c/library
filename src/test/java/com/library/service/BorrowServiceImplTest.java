@@ -36,7 +36,8 @@ import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class BorrowServiceImplTest {
-    private static final Clock CLOCK = Clock.fixed(Instant.parse("2026-09-07T02:00:00Z"), ZoneId.of("Asia/Shanghai"));
+    private static final Clock CLOCK = Clock.fixed(
+            Instant.parse("2026-09-07T02:00:00Z"), ZoneId.of("Asia/Shanghai"));
 
     @Mock
     private BookMapper bookMapper;

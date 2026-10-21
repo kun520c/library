@@ -49,10 +49,12 @@ class AuthenticationInterceptorTest {
     void missingMalformedAndEmptyBearerTokensReturn401() throws Exception {
         for (String authorization : new String[]{null, "token", "Bearer ", "Bearer one two"}) {
             MockHttpServletResponse response = new MockHttpServletResponse();
-            assertThat(interceptor().preHandle(request("GET", authorization), response, new Object())).isFalse();
+            assertThat(interceptor().preHandle(request("GET", authorization), response, new Object()))
+                    .isFalse();
             assertThat(response.getStatus()).isEqualTo(401);
             assertThat(response.getContentAsString()).contains("\"code\":401");
         }
+
         verify(jwtService, never()).parseToken(org.mockito.ArgumentMatchers.anyString());
     }
 
@@ -61,7 +63,8 @@ class AuthenticationInterceptorTest {
         when(jwtService.parseToken("expired")).thenThrow(new ExpiredJwtException(null, null, "expired"));
         MockHttpServletResponse response = new MockHttpServletResponse();
 
-        assertThat(interceptor().preHandle(request("GET", "Bearer expired"), response, new Object())).isFalse();
+        assertThat(interceptor().preHandle(request("GET", "Bearer expired"), response, new Object()))
+                .isFalse();
         assertThat(response.getStatus()).isEqualTo(401);
     }
 

@@ -101,6 +101,7 @@ class ApiSecurityWebTest {
                     .andExpect(status().isBadRequest())
                     .andExpect(jsonPath("$.code").value(400));
         }
+
         verify(userService, never()).register(any());
         verify(userService, never()).login(any());
     }
@@ -108,8 +109,10 @@ class ApiSecurityWebTest {
     @Test
     void multibytePasswordAtBcryptLimitIsAccepted() throws Exception {
         mockMvc.perform(post("/user/register").contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"account\":\"reader\",\"username\":\"Reader\",\"password\":\"" + "密".repeat(24) + "\"}"))
+                        .content("{\"account\":\"reader\",\"username\":\"Reader\",\"password\":\""
+                                + "密".repeat(24) + "\"}"))
                 .andExpect(status().isOk());
+
         verify(userService).register(any());
     }
 
@@ -476,6 +479,7 @@ class ApiSecurityWebTest {
                     .andExpect(status().isBadRequest())
                     .andExpect(jsonPath("$.code").value(400));
         }
+
         verify(userService, never()).updateProfile(any());
     }
 }

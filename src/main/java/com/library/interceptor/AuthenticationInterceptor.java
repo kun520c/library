@@ -29,7 +29,8 @@ public class AuthenticationInterceptor implements HandlerInterceptor {
     private final ObjectMapper objectMapper;
 
     @Override
-    public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) throws Exception {
+    public boolean preHandle(HttpServletRequest request, HttpServletResponse response,
+                             Object handler) throws Exception {
         UserContext.clear();
         if ("OPTIONS".equalsIgnoreCase(request.getMethod())) {
             return true;
@@ -44,12 +45,14 @@ public class AuthenticationInterceptor implements HandlerInterceptor {
         try {
             AuthenticatedUser user = jwtService.toPrincipal(jwtService.parseToken(token));
             UserContext.set(user);
+
             RequireRole requirement = findRoleRequirement(handler);
             if (requirement != null && user.role() != requirement.value()) {
                 UserContext.clear();
                 writeError(response, HttpStatus.FORBIDDEN, "权限不足");
                 return false;
             }
+
             return true;
         } catch (JwtException | IllegalArgumentException exception) {
             UserContext.clear();
@@ -80,13 +83,15 @@ public class AuthenticationInterceptor implements HandlerInterceptor {
         if (!(handler instanceof HandlerMethod method)) {
             return null;
         }
-        RequireRole requirement = AnnotatedElementUtils.findMergedAnnotation(method.getMethod(), RequireRole.class);
+        RequireRole requirement = AnnotatedElementUtils.findMergedAnnotation(
+                method.getMethod(), RequireRole.class);
         return requirement != null
                 ? requirement
                 : AnnotatedElementUtils.findMergedAnnotation(method.getBeanType(), RequireRole.class);
     }
 
-    private void writeError(HttpServletResponse response, HttpStatus status, String message) throws Exception {
+    private void writeError(HttpServletResponse response, HttpStatus status,
+                            String message) throws Exception {
         response.setStatus(status.value());
         response.setCharacterEncoding(StandardCharsets.UTF_8.name());
         response.setContentType(MediaType.APPLICATION_JSON_VALUE);

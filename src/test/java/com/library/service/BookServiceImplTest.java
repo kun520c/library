@@ -152,6 +152,7 @@ class BookServiceImplTest {
             inserted.setId(1);
             return 1;
         }).when(bookMapper).insert(any(Book.class));
+
         service.add(bookCreateDto());
 
         verify(cacheInvalidator).evictAfterCommit(1);
@@ -197,6 +198,7 @@ class BookServiceImplTest {
         when(bookMapper.selectById(1)).thenReturn(book());
         when(bookMapper.existsByIsbnAndIdNot("978-7-111", 1)).thenReturn(false);
         when(bookMapper.updateBasicInfo(any())).thenReturn(1);
+
         service.update(1, bookUpdateDto());
 
         verify(cacheInvalidator).evictAfterCommit(1);
@@ -210,7 +212,8 @@ class BookServiceImplTest {
 
         service.update(1, bookUpdateDto());
 
-        verify(bookMapper).updateBasicInfo(org.mockito.ArgumentMatchers.argThat(updated -> updated.getStock() == null));
+        verify(bookMapper).updateBasicInfo(
+                org.mockito.ArgumentMatchers.argThat(updated -> updated.getStock() == null));
     }
 
     @Test
@@ -260,14 +263,16 @@ class BookServiceImplTest {
     @Test
     void pageUsesLongOffsetAndReturnsTotalAndRequestCoordinates() {
         BookPageDTO query = new BookPageDTO(" Spring ", null, " 978-7-111 ", null, 3, 20);
-        when(bookMapper.selectByCondition(eq("Spring"), eq(null), eq("978-7-111"), eq(null), anyLong(), eq(20)))
+        when(bookMapper.selectByCondition(
+                eq("Spring"), eq(null), eq("978-7-111"), eq(null), anyLong(), eq(20)))
                 .thenReturn(List.of(book()));
         when(bookMapper.countByCondition("Spring", null, "978-7-111", null)).thenReturn(41L);
 
         var page = service.page(query);
 
         ArgumentCaptor<Long> offset = ArgumentCaptor.forClass(Long.class);
-        verify(bookMapper).selectByCondition(eq("Spring"), eq(null), eq("978-7-111"), eq(null), offset.capture(), eq(20));
+        verify(bookMapper).selectByCondition(
+                eq("Spring"), eq(null), eq("978-7-111"), eq(null), offset.capture(), eq(20));
         assertThat(offset.getValue()).isEqualTo(40L);
         assertThat(page.getTotal()).isEqualTo(41L);
         assertThat(page.getPage()).isEqualTo(3);
