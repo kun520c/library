@@ -41,10 +41,12 @@ public class BookServiceImpl implements BookService {
     public BookVO getById(Integer id) {
         String cacheKey = cacheKey(id);
         String cachedValue = readCache(cacheKey);
+
         if (cachedValue != null) {
             if (cacheProperties.nullValue().equals(cachedValue)) {
                 throw notFound();
             }
+
             try {
                 return objectMapper.readValue(cachedValue, BookVO.class);
             } catch (Exception exception) {
@@ -65,6 +67,7 @@ public class BookServiceImpl implements BookService {
         } catch (Exception exception) {
             log.warn("图书缓存序列化失败，bookId={}, reason={}", id, exception.getMessage());
         }
+
         return bookVO;
     }
 
@@ -75,10 +78,12 @@ public class BookServiceImpl implements BookService {
         if (bookMapper.existsByIsbn(dto.getIsbn())) {
             throw new BusinessException(HttpStatus.CONFLICT, "ISBN已存在");
         }
+
         Book book = toEntity(dto);
         if (bookMapper.insert(book) != 1) {
             throw new IllegalStateException("新增图书未写入数据库");
         }
+
         if (book.getId() != null) {
             cacheInvalidator.evictAfterCommit(book.getId());
         }
@@ -94,11 +99,13 @@ public class BookServiceImpl implements BookService {
         if (bookMapper.existsByIsbnAndIdNot(dto.getIsbn(), id)) {
             throw new BusinessException(HttpStatus.CONFLICT, "ISBN已被其他图书使用");
         }
+
         Book book = toEntity(dto);
         book.setId(id);
         if (bookMapper.updateBasicInfo(book) == 0) {
             throw notFound();
         }
+
         cacheInvalidator.evictAfterCommit(id);
     }
 
@@ -108,12 +115,15 @@ public class BookServiceImpl implements BookService {
         if (dto.delta() == 0) {
             throw new BusinessException(HttpStatus.BAD_REQUEST, "库存调整量不能为0");
         }
+
         if (bookMapper.adjustStock(id, dto.delta()) != 1) {
             if (bookMapper.selectById(id) == null) {
                 throw notFound();
             }
+
             throw new BusinessException(HttpStatus.CONFLICT, "库存调整超出允许范围");
         }
+
         cacheInvalidator.evictAfterCommit(id);
     }
 
@@ -126,9 +136,11 @@ public class BookServiceImpl implements BookService {
         if (borrowRecordMapper.existsBorrowedByBookId(id)) {
             throw new BusinessException(HttpStatus.CONFLICT, "该图书当前存在未归还借阅记录，不能删除");
         }
+
         if (bookMapper.deleteById(id) == 0) {
             throw notFound();
         }
+
         cacheInvalidator.evictAfterCommit(id);
     }
 
@@ -137,11 +149,14 @@ public class BookServiceImpl implements BookService {
     public PageVO<BookVO> page(BookPageDTO dto) {
         long offset = ((long) dto.getPage() - 1L) * dto.getSize();
         List<BookVO> books = bookMapper.selectByCondition(
-                        dto.getTitle(), dto.getAuthor(), dto.getIsbn(), dto.getCategoryId(), offset, dto.getSize())
+                        dto.getTitle(), dto.getAuthor(), dto.getIsbn(),
+                        dto.getCategoryId(), offset, dto.getSize())
                 .stream()
                 .map(this::toVO)
                 .toList();
-        long total = bookMapper.countByCondition(dto.getTitle(), dto.getAuthor(), dto.getIsbn(), dto.getCategoryId());
+
+        long total = bookMapper.countByCondition(
+                        dto.getTitle(), dto.getAuthor(), dto.getIsbn(), dto.getCategoryId());
         return new PageVO<>(books, total, dto.getPage(), dto.getSize());
     }
 
