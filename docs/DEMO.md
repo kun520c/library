@@ -63,6 +63,7 @@ import_local_env() {
   done < "$file"
 }
 import_local_env .env.portfolio || exit 1
+export SPRING_PROFILES_ACTIVE=prod
 ./mvnw spring-boot:run
 ```
 
