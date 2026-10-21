@@ -23,12 +23,14 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<Result<Void>> handleValidation(MethodArgumentNotValidException exception) {
-        return error(HttpStatus.BAD_REQUEST, firstFieldMessage(exception.getBindingResult().getFieldError()));
+        return error(HttpStatus.BAD_REQUEST,
+                firstFieldMessage(exception.getBindingResult().getFieldError()));
     }
 
     @ExceptionHandler(BindException.class)
     public ResponseEntity<Result<Void>> handleBind(BindException exception) {
-        return error(HttpStatus.BAD_REQUEST, firstFieldMessage(exception.getBindingResult().getFieldError()));
+        return error(HttpStatus.BAD_REQUEST,
+                firstFieldMessage(exception.getBindingResult().getFieldError()));
     }
 
     @ExceptionHandler(ConstraintViolationException.class)

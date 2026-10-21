@@ -41,6 +41,7 @@ public class BorrowServiceImpl implements BorrowService {
         if (book == null) {
             throw new BusinessException(HttpStatus.NOT_FOUND, "图书不存在");
         }
+
         if (bookMapper.decrementStockIfAvailable(bookId) != 1) {
             throw new BusinessException(HttpStatus.CONFLICT, "图书库存不足");
         }
@@ -55,7 +56,9 @@ public class BorrowServiceImpl implements BorrowService {
         if (borrowRecordMapper.insert(record) != 1) {
             throw new IllegalStateException("借阅记录未写入数据库");
         }
+
         cacheInvalidator.evictAfterCommit(bookId);
+
         return BorrowRecordVO.builder()
                 .recordId(record.getId())
                 .bookId(bookId)
@@ -80,13 +83,16 @@ public class BorrowServiceImpl implements BorrowService {
         if (user.role() != Role.ADMIN && !record.getUserId().equals(user.userId())) {
             throw new BusinessException(HttpStatus.FORBIDDEN, "不能归还其他用户的借阅记录");
         }
+
         if (record.getStatus() == BorrowStatus.RETURNED
                 || borrowRecordMapper.markReturned(recordId, LocalDateTime.now(clock)) != 1) {
             throw new BusinessException(HttpStatus.CONFLICT, "该借阅记录已经归还");
         }
+
         if (bookMapper.incrementStock(record.getBookId()) != 1) {
             throw new BusinessException(HttpStatus.CONFLICT, "无法恢复库存，请联系管理员核对图书状态与库存上限");
         }
+
         cacheInvalidator.evictAfterCommit(record.getBookId());
     }
 
@@ -101,6 +107,7 @@ public class BorrowServiceImpl implements BorrowService {
         if (user.role() != Role.ADMIN && !record.getUserId().equals(user.userId())) {
             throw new BusinessException(HttpStatus.FORBIDDEN, "不能查看其他用户的借阅记录");
         }
+
         applyOverdue(record, LocalDateTime.now(clock));
         return record;
     }
@@ -125,9 +132,12 @@ public class BorrowServiceImpl implements BorrowService {
         long offset = ((long) dto.getPage() - 1L) * dto.getSize();
         List<BorrowRecordVO> records = borrowRecordMapper.selectByCondition(
                 userId, dto.getStatus(), dto.getBookTitle(), offset, dto.getSize());
+
         LocalDateTime now = LocalDateTime.now(clock);
         records.forEach(record -> applyOverdue(record, now));
-        long total = borrowRecordMapper.countByCondition(userId, dto.getStatus(), dto.getBookTitle());
+
+        long total = borrowRecordMapper.countByCondition(
+                userId, dto.getStatus(), dto.getBookTitle());
         return new PageVO<>(records, total, dto.getPage(), dto.getSize());
     }
 
