@@ -4,7 +4,7 @@
 
 ## 1. 初始化环境
 
-普通启动可直接使用 [README 快速开始](../README.md#快速开始windows-powershell)。复现本轮 Smoke Test 时，在根目录准备独立环境文件；已有同名文件请保留并核对：
+普通启动可直接使用 [README 快速开始](../README.md#快速开始)（含 Windows PowerShell 与 Linux/macOS bash 对照）。隔离 Smoke 下列步骤仍以 PowerShell 为例。bash 不要 `source` 或 `.` `.env.portfolio`；使用与 README 相同的 `import_local_env .env.portfolio`，并把 `.\mvnw.cmd` 换成 `./mvnw`。复现本轮 Smoke Test 时，在根目录准备独立环境文件；已有同名文件请保留并核对：
 
 ```powershell
 if (!(Test-Path .env.portfolio)) { Copy-Item .env.example .env.portfolio }
@@ -33,6 +33,38 @@ Get-Content -Raw -Encoding utf8 sql/seed-demo.sql |
 # 避免意外使用已有 application-local.yaml 的私人连接配置。
 $env:SPRING_PROFILES_ACTIVE = 'prod'
 .\mvnw.cmd spring-boot:run
+```
+
+Linux / macOS 导入同一份 `.env.portfolio` 后再启动后端。`import_local_env` 与 README、配置说明中的函数相同，只赋值、不 source。前面的 `docker compose --env-file .env.portfolio -p library-portfolio` 命令在 bash 中同样适用；导入 seed 时把 PowerShell 管道换成 `docker compose --env-file .env.portfolio -p library-portfolio exec -T mysql sh -c 'MYSQL_PWD="$MYSQL_PASSWORD" exec mysql --default-character-set=utf8mb4 -u"$MYSQL_USER" "$MYSQL_DATABASE"' < sql/seed-demo.sql`。
+
+```bash
+# 与 scripts/Import-LocalEnv.ps1 相同：只解析普通 KEY=VALUE 并赋值。
+# 不要 source 或 . 原始环境文件。
+import_local_env() {
+  local file="$1" line key val
+  [[ -n "$file" && -f "$file" ]] || { echo "Environment file not found: ${file:-}" >&2; return 1; }
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    line="${line%$'\r'}"
+    [[ "$line" == *[![:space:]]* ]] || continue
+    line="${line#"${line%%[![:space:]]*}"}"
+    line="${line%"${line##*[![:space:]]}"}"
+    [[ -z "$line" || "$line" == '#'* ]] && continue
+    if [[ "$line" != *=* ]]; then
+      echo "Expected plain KEY=VALUE entries in the local environment file." >&2
+      return 1
+    fi
+    key="${line%%=*}"
+    val="${line#*=}"
+    if [[ ! "$key" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]; then
+      echo "Expected plain KEY=VALUE entries in the local environment file." >&2
+      return 1
+    fi
+    export "$key=$val"
+  done < "$file"
+}
+import_local_env .env.portfolio || exit 1
+export SPRING_PROFILES_ACTIVE=prod
+./mvnw spring-boot:run
 ```
 
 另开终端执行 `cd frontend`、`npm ci`、`npm run dev -- --strictPort`，打开 <http://localhost:5173>。prod 只用于本次隔离演示，其文档端点关闭，不代表生产部署已验证。

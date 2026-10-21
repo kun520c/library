@@ -1,6 +1,34 @@
 # 配置与数据库
 
-Spring Boot 不会自动读取根目录 `.env`。Compose 用它做变量替换，PowerShell 运行应用前还需执行 `. ./scripts/Import-LocalEnv.ps1`。脚本只接受示例中的普通 `KEY=VALUE`，不执行 shell 表达式或自动去除引号。
+Spring Boot 不会自动读取根目录 `.env`。Compose 用它做变量替换；运行应用前还需把其中的变量导入当前 shell。PowerShell 执行 `. ./scripts/Import-LocalEnv.ps1`。bash 不要 `source` 或 `.` 原始 `.env`（本批未新增独立 bash 脚本）。示例 `DB_URL` 含未加引号的 `&`，直接 source 会被 shell 当成运算符。请使用与 `Import-LocalEnv.ps1` 相同的逐行赋值：跳过空行和以 `#` 开头的注释，去掉行首行尾空白，只按第一个 `=` 分成名字和值，名字须匹配 `^[A-Za-z_][A-Za-z0-9_]*$`，再执行 `export "$key=$val"`。不执行 shell 表达式，不展开 `$`，不自动去除引号。因此 `DB_URL` 中的 `&` 与 `JWT_SECRET` 中的特殊字符按字面进入环境变量；值不要加引号，行内 `#` 也会留在值里。README 与 DEMO 使用同一函数。
+
+```bash
+# 与 scripts/Import-LocalEnv.ps1 相同：只解析普通 KEY=VALUE 并赋值。
+# 不要 source 或 . 原始环境文件。
+import_local_env() {
+  local file="$1" line key val
+  [[ -n "$file" && -f "$file" ]] || { echo "Environment file not found: ${file:-}" >&2; return 1; }
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    line="${line%$'\r'}"
+    [[ "$line" == *[![:space:]]* ]] || continue
+    line="${line#"${line%%[![:space:]]*}"}"
+    line="${line%"${line##*[![:space:]]}"}"
+    [[ -z "$line" || "$line" == '#'* ]] && continue
+    if [[ "$line" != *=* ]]; then
+      echo "Expected plain KEY=VALUE entries in the local environment file." >&2
+      return 1
+    fi
+    key="${line%%=*}"
+    val="${line#*=}"
+    if [[ ! "$key" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]; then
+      echo "Expected plain KEY=VALUE entries in the local environment file." >&2
+      return 1
+    fi
+    export "$key=$val"
+  done < "$file"
+}
+import_local_env .env || exit 1
+```
 
 | 环境变量 | 默认 / 要求 | 作用 |
 | --- | --- | --- |
@@ -38,7 +66,7 @@ SOURCE sql/schema.sql;
 SOURCE sql/seed-demo.sql;
 ```
 
-单独启动 Redis，设置 `.env` 中的连接和密码，复制 local 示例后导入环境变量，再运行 `.\mvnw.cmd spring-boot:run`。不要用 Windows PowerShell 的 `<` 进行标准输入文件重定向。
+单独启动 Redis，设置 `.env` 中的连接和密码，复制 local 示例后导入环境变量，再运行 `.\mvnw.cmd spring-boot:run`（Linux/macOS 为 `./mvnw spring-boot:run`）。不要用 Windows PowerShell 的 `<` 进行标准输入文件重定向；bash 可用 `< sql/seed-demo.sql` 这类重定向。
 
 ## 已有库与旧表迁移
 
